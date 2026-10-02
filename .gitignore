@@ -19,3 +19,5 @@
 /dist/*
 /build/*
 /coverage/*
+.wrangler
+.dev.vars*

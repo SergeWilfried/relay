@@ -11,5 +11,10 @@
     "isolatedModules": true,
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
+  "references": [
+    {
+      "path": "./tsconfig.worker.json"
+    }
+  ],
   "include": ["src", "vite.config.ts"]
 }

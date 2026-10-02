@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { cloudflare } from "@cloudflare/vite-plugin";
 
 export default defineConfig({
   // one copy of React for the app and the Privy SDK (a second copy breaks hooks)
@@ -53,5 +54,6 @@ export default defineConfig({
         ],
       },
     }),
+    cloudflare(),
   ],
 });
