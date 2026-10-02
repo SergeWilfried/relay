@@ -4,6 +4,7 @@ import { BackHeader } from '../../components/BackHeader';
 import { POOLS } from '../../lib/data';
 import { useFcfaAvatar } from '../../lib/geo';
 import { useT } from '../../i18n';
+import { localizePct } from '../../lib/format';
 import { useApp } from '../../state/app';
 
 export default function PoolDetail() {
@@ -15,7 +16,7 @@ export default function PoolDetail() {
   const pool = POOLS.find((p) => p.id === id);
   if (!pool) return <Navigate to="/pool" replace />;
   const isFcfa = pool.id === 'fcfa';
-  const cells: [string, string, boolean?][] = [[t('Fee rate'), pool.feeRate], [t('24h volume'), pool.volume], [t('TVL'), pool.tvl], [t('Utilization'), `${pool.util}%`, true]];
+  const cells: [string, string, boolean?][] = [[t('Fee rate'), localizePct(pool.feeRate)], [t('24h volume'), pool.volume], [t('TVL'), pool.tvl], [t('Utilization'), localizePct(`${pool.util}%`), true]];
   return (
     <div className="card">
       <BackHeader title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><AssetIcon char={pool.char} color={pool.color} logo={pool.id === 'fcfa' ? fcfaAvatar.logo : pool.logo} size={26} />{t('{name} pool', { name: t(pool.name) })}</span>} to="/pool" />
@@ -27,7 +28,7 @@ export default function PoolDetail() {
       <div style={{ margin: '16px 2px 4px', fontWeight: 800, fontSize: 13 }}>{t('How it earns')}</div>
       <div className="risk" style={{ gap: 8, margin: '8px 2px 0' }}>
         <p>{isFcfa ? t("Buys and cash-outs draw FCFA from the pool's mobile money float.") : t('Swaps routed through the fiat rail draw {name} from this pool.', { name: pool.name })}</p>
-        <p>{t('Every transaction pays the {rate} rail fee.', { rate: pool.feeRate })}</p>
+        <p>{t('Every transaction pays the {rate} rail fee.', { rate: localizePct(pool.feeRate) })}</p>
         <p>{t('Fees accrue to providers in proportion to their share, daily.')}</p>
       </div>
       {isFcfa ? (

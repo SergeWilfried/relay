@@ -35,3 +35,6 @@ export const fmtRate = (n: number) => (n >= 1 ? fmtCrypto(n, 2, 2) : n >= 0.01 ?
 /** Length bucket used for phone-only font stepping (see `[data-len]` rules in app.css). */
 export const lenStep = (text: string, medium: number, large: number): 'm' | 'l' | 'xl' =>
   text.length <= medium ? 'm' : text.length <= large ? 'l' : 'xl';
+
+/** "8.4%" -> "8,4 %" in French (decimal comma, space before the sign); unchanged in English. */
+export const localizePct = (s: string) => (getLang() === 'fr' ? s.replace('.', ',').replace(/\s*%/, '\u202F%') : s);

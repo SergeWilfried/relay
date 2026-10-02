@@ -93,6 +93,7 @@ export const app: Record<string, string> = {
   'Instant': 'Instantané',
   'after fees': 'après frais',
   'Fee': 'Frais',
+  'Fee: {rate} · {amount} FCFA': 'Frais : {rate} · {amount} FCFA',
   'Fee: 0.25% fiat rail · Slippage 0.5%': 'Frais : 0,25 % rail fiat · Glissement 0,5 %',
   'Arrives in 1–2 minutes': 'Arrive en 1 à 2 minutes',
   '1–2 minutes': '1 à 2 minutes',

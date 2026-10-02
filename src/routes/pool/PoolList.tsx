@@ -3,6 +3,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { FEES_30D } from '../../lib/data';
 import { usePools } from '../../lib/pools';
 import { useT } from '../../i18n';
+import { localizePct } from '../../lib/format';
 import { useFcfaAvatar } from '../../lib/geo';
 import { fmtInt, lenStep } from '../../lib/format';
 import { useApp } from '../../state/app';
@@ -67,7 +68,7 @@ export default function PoolList() {
                 <div className="pool-n">{t(p.name)}</div><div className="pool-b" data-len={lenStep(p.blurb, 34, 44)}>{t(p.blurb)}</div>
                 <div className="util"><i style={{ width: `${p.util}%` }} /></div>
               </div>
-              <div className="pool-r"><div className="pool-apy" data-len={lenStep(p.apy, 5, 7)}>{p.apy}</div><div className="pool-u">{t('{n}% used', { n: p.util })}</div></div>
+              <div className="pool-r"><div className="pool-apy" data-len={lenStep(p.apy, 5, 7)}>{localizePct(p.apy)}</div><div className="pool-u">{t('{n}% used', { n: p.util })}</div></div>
             </Link>
           ))}
         </div>

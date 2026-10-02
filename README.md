@@ -88,5 +88,14 @@ The answer is cached on the device for 24h. It is **cosmetic only**: a VPN or ro
 Flags live in `design-assets/country/` (originals) and `public/country/` (square 96px, `pnpm flags`). To add a country: add its flag to `scripts/flags.mjs` and an entry to `SERVED` in `src/lib/geo.ts`.
 Locally Wrangler fills in `request.cf` from your real IP; to pretend: `localStorage['relay-mock-country'] = 'SN'` (dev only).
 
+### Languages (French by default)
+
+The app is in **French** (Senegal, Cote d'Ivoire, Burkina Faso) with English kept as a fallback; users switch with the FR / EN toggle on the login screen and in Account (stored in `localStorage['relay-lang']`).
+- Text lives in the code as English source strings: `t('Review order')` (components, via `useT()`) or `tr('...')` (non-React code). Placeholders use `{name}`.
+- French is in `src/i18n/fr.common.ts` and `src/i18n/fr.app.ts`, keyed by the English string. A missing key falls back to English and logs `[i18n] missing French translation: ...` in dev.
+- Numbers and dates follow the language (`1 500 000`, `1,50`, `0,25 %`): always format with `src/lib/format.ts` (`fmtInt`, `fmtCrypto`, `localizePct`, `parseAmount`). In French a comma typed in an amount is a decimal comma.
+- Not translated: the internal `/admin` page (English), Privy's own sign-in modal opened by "More sign-in options" (Privy only localizes wallet/card screens), and text stored in an order when it was created (an order made in French stays French if you later switch to English).
+- Server messages shown to users are translated on the client by matching the English message (see the last block of `fr.app.ts`).
+
 ### Dev failure switches
 `localStorage['relay-mock-quote' | 'relay-mock-submit' | 'relay-mock-order' | 'relay-mock-pools']` — see `src/lib/mock.ts`.

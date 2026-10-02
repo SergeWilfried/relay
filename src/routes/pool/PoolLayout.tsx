@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { totalTvlMillions } from '../../lib/data';
-import { lenStep } from '../../lib/format';
+import { lenStep, localizePct } from '../../lib/format';
 import { useT } from '../../i18n';
 
 export const PoolLayout = () => <div className="page pool"><Outlet /></div>;
@@ -22,7 +22,7 @@ export function Stats({ empty }: { empty?: boolean }) {
     <div className="stats">
       <Stat label="Total liquidity" value={v(`${Math.round(totalTvlMillions())}M`)} unit="FCFA" />
       <Stat label="24h volume" value={v('96M')} unit="FCFA" />
-      <Stat label="Avg APY" value={v('9.2%')} unit="paid in FCFA" acc />
+      <Stat label="Avg APY" value={v(localizePct('9.2%'))} unit="paid in FCFA" acc />
     </div>
   );
 }
