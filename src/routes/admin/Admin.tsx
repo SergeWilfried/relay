@@ -4,6 +4,7 @@ import { Sheet } from '../../components/Sheet';
 import { fmtInt } from '../../lib/format';
 import { useSubmit } from '../../lib/api';
 import * as api from './api';
+import Revenue from './Revenue';
 import Sweeps from './Sweeps';
 import type { AdminPayout } from './api';
 
@@ -100,7 +101,7 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => !!api.getKey());
   const [rows, setRows] = useState<AdminPayout[] | null>(null);
-  const [view, setView] = useState<'payouts' | 'sweeps'>('payouts');
+  const [view, setView] = useState<'payouts' | 'sweeps' | 'revenue'>('payouts');
   const [tab, setTab] = useState<Tab>('pending');
   const [action, setAction] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -144,8 +145,10 @@ export default function Admin() {
       <div className="admin-tabs" role="tablist" aria-label="Section" style={{ marginBottom: 4 }}>
         <button role="tab" aria-selected={view === 'payouts'} className={`admin-tab${view === 'payouts' ? ' on' : ''}`} onClick={() => setView('payouts')}>Payouts</button>
         <button role="tab" aria-selected={view === 'sweeps'} className={`admin-tab${view === 'sweeps' ? ' on' : ''}`} onClick={() => setView('sweeps')}>Sweeps</button>
+        <button role="tab" aria-selected={view === 'revenue'} className={`admin-tab${view === 'revenue' ? ' on' : ''}`} onClick={() => setView('revenue')}>Revenue</button>
       </div>
       {view === 'sweeps' && <Sweeps onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
+      {view === 'revenue' && <Revenue onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
 
       {view === 'payouts' && <>
       <div className="admin-tabs" role="tablist">

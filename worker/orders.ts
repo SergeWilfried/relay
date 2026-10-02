@@ -1,7 +1,7 @@
 import { normalizeAddress, SELL_ASSETS, toUnits } from './assets';
 import { notify } from './notify';
 import { createDepositWallet } from './depositWallet';
-import { sellPayoutFcfa } from './pricing';
+import { sellQuote } from './pricing';
 import { COUNTED, ensureProfile, evaluate, loadFacts, loadModes, logDecision, RuleDenied, windowStarts, type Outcome } from './rules';
 
 export type OrderStatus = 'awaiting_deposit' | 'processing' | 'underpaid';
@@ -78,7 +78,7 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 
 	// Rules run before a wallet is created: a denied order costs nothing. The FCFA value is priced here, never taken from the client.
 	const now = Date.now();
-	const amountFcfa = sellPayoutFcfa(asset.sym, amount);
+	const amountFcfa = sellQuote(asset.sym, amount).payoutFcfa;
 	const profile = await ensureProfile(env, userId, country, now);
 	const facts = await loadFacts(env, userId, { amountFcfa, phone, country }, profile, now);
 	const outcome = evaluate(facts, { modes: await loadModes(env) });
@@ -170,13 +170,13 @@ export async function applyDeposit(env: Env, d: Deposit): Promise<{ result: Depo
 	}
 	// Confirm the deposit and create the payout in ONE batch (a transaction): an order can't be 'processing' without its payout.
 	// The payout starts as pending_approval: a person releases the money.
-	const payoutAmount = sellPayoutFcfa(row.asset, row.amount);
+	const q = sellQuote(row.asset, row.amount);
 	const [res] = await env.DB.batch([
 		env.DB.prepare(`UPDATE orders SET status = 'processing', started_at = ?, deposit_tx = ?, deposit_amount_units = ?, note = ?, updated_at = ? WHERE id = ? AND status = 'awaiting_deposit'`)
 			.bind(now, d.txHash ?? null, d.amountUnits.toString(), late ? 'Deposit arrived after the quote expired; converted at the current rate' : null, now, row.id),
-		env.DB.prepare(`INSERT OR IGNORE INTO payouts (id, order_id, user_id, provider, phone, operator, amount_fcfa, status, created_at, updated_at)
-			SELECT 'po' || o.id, o.id, o.user_id, ?, o.phone, o.operator, ?, 'pending_approval', ?, ? FROM orders o WHERE o.id = ? AND o.status = 'processing'`)
-			.bind(env.PAYOUT_PROVIDER, payoutAmount, now, now, row.id),
+		env.DB.prepare(`INSERT OR IGNORE INTO payouts (id, order_id, user_id, provider, phone, operator, amount_fcfa, gross_fcfa, platform_fee_fcfa, psp_fee_fcfa, status, created_at, updated_at)
+			SELECT 'po' || o.id, o.id, o.user_id, ?, o.phone, o.operator, ?, ?, ?, ?, 'pending_approval', ?, ? FROM orders o WHERE o.id = ? AND o.status = 'processing'`)
+			.bind(env.PAYOUT_PROVIDER, q.payoutFcfa, q.grossFcfa, q.platformFeeFcfa, q.pspFeeFcfa, now, now, row.id),
 	]);
 	return { result: res!.meta.changes > 0 ? 'advanced' : 'ignored', orderId: row.id };
 }

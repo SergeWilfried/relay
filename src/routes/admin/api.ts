@@ -72,3 +72,16 @@ export const runSweeps = () => call<{ queued: number; processed: number }>('/swe
 export const retrySweep = (orderId: string) => call<AdminSweep>(`/sweeps/${orderId}/retry`, 'POST');
 export const resolveSweep = (orderId: string, outcome: 'submitted' | 'failed', note: string, txHash?: string) =>
   call<AdminSweep>(`/sweeps/${orderId}/resolve`, 'POST', { outcome, note, ...(txHash ? { txHash } : {}) });
+
+export interface RevenueTotals { count: number; grossFcfa: number; platformFeeFcfa: number; pspFeeFcfa: number; payoutFcfa: number }
+export interface Revenue {
+  feeRates: { platform: number; psp: number; total: number };
+  days: number;
+  paid: RevenueTotals;
+  pending: RevenueTotals;
+  daily: (RevenueTotals & { day: string })[];
+  byAsset: (RevenueTotals & { key: string })[];
+  byOperator: (RevenueTotals & { key: string })[];
+  uncountedPaid: number;
+}
+export const getRevenue = (days: number) => call<Revenue>(`/revenue?days=${days}`);

@@ -3,6 +3,7 @@ import { BadRequest, createSellOrder, getOrder, listOrders } from './orders';
 import { approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
 import { getProvider } from './payout';
 import { ensureProfile, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
+import { revenueReport } from './revenue';
 import { clearClefFlag, runPatternReview } from './clefBatch';
 import { POINTS } from './clef';
 import { listSweeps, resolveSweep, retrySweep, runSweeps, SweepConflict } from './sweep';
@@ -103,6 +104,11 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 		return json({ user: decodeURIComponent(um[1]!), status: body.status });
 	}
 
+	if (pathname === '/api/admin/revenue' && request.method === 'GET') {
+		const days = Number(url.searchParams.get('days') ?? 30);
+		if (![0, 7, 30, 90, 365].includes(days)) return json({ error: 'days must be 0 (all), 7, 30, 90 or 365' }, 400);
+		return json(await revenueReport(env, days));
+	}
 	if (pathname === '/api/admin/sweeps' && request.method === 'GET') return json({ sweeps: await listSweeps(env, url.searchParams.get('status') ?? undefined) });
 	if (pathname === '/api/admin/sweeps/run' && request.method === 'POST') return json(await runSweeps(env));
 	const sm = /^\/api\/admin\/sweeps\/([a-z0-9]{6,32})\/(retry|resolve)$/.exec(pathname);

@@ -1,10 +1,12 @@
 import { ASSETS, ETH, type Asset, type Provider, type Tab } from './data';
 import { fmtCrypto, fmtInt, fmtRate, localizePct } from './format';
 import { tr } from '../i18n';
+import { feesOn, floor100, TOTAL_FEE } from './fees';
 
-export const RAIL_FEE = 0.0025;
 export const shortAddr = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
-const round100 = (n: number) => Math.round(n / 100) * 100;
+const pct = (r: number) => localizePct(`${r * 100}%`);
+/** One fee line for customers: the 2.5% platform fee and the 2.5% provider fee are shown as a single 5% (the split is admin-only). */
+const feeRow = (gross: number): [string, string] => [tr('Fee'), `${pct(TOTAL_FEE)} · ${fmtInt(feesOn(gross).total)} FCFA`];
 
 export interface QuoteInput {
   tab: Tab;
@@ -46,18 +48,18 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
   const crypto = from;
   if (tab === 'swap') {
     const gross = amount * from.fcfa;
-    const fee = gross * RAIL_FEE;
+    const fee = feesOn(gross).total;
     const recv = (amount * from.fcfa) / to.fcfa;
     const rate = `1 ${from.sym} = ${fmtRate(from.fcfa / to.fcfa)} ${to.sym} · ${fmtInt(from.fcfa)} FCFA`;
     return {
       fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtRate(recv),
-      fromSub: `≈ ${fmtInt(round100(gross))} FCFA · ${tr('Balance')} ${balText} ${from.sym}`,
-      toSub: `≈ ${fmtInt(round100(gross - fee))} FCFA ${tr('after fees')}`,
-      rate, fee: tr('Fee: 0.25% fiat rail · Slippage 0.5%'),
+      fromSub: `≈ ${fmtInt(Math.round(gross / 100) * 100)} FCFA · ${tr('Balance')} ${balText} ${from.sym}`,
+      toSub: `≈ ${fmtInt(floor100(gross - fee))} FCFA ${tr('after fees')}`,
+      rate, fee: tr('Fee: {rate} · Slippage 0.5%', { rate: pct(TOTAL_FEE) }),
       rows: [
         [tr('Rate'), `1 ${from.sym} = ${fmtRate(from.fcfa / to.fcfa)} ${to.sym}`],
         [tr('Network fee'), `${fmtInt(1240)} FCFA`],
-        [tr('Fiat rail fee'), `${localizePct('0.25%')} · ${fmtInt(fee)} FCFA`],
+        feeRow(gross),
         [tr('Est. arrival'), tr('~45 seconds')],
         [tr('You receive'), `${fmtRate(recv)} ${to.sym}`],
       ],
@@ -66,7 +68,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
     };
   }
   if (tab === 'buy') {
-    const fee = amount * RAIL_FEE;
+    const fee = feesOn(amount).total;
     const netFee = 710;
     const net = Math.max(0, amount - fee - netFee);
     const k = 10 ** crypto.dec;
@@ -76,11 +78,11 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
     return {
       fromAmt: fmtInt(amount), toAmt: fmtCrypto(recv, crypto.dec, crypto.dec),
       fromSub: p ? `${p.name} ${p.number} · ${tr('instant')}` : tr('Pay from mobile money'),
-      toSub: `≈ ${fmtInt(round100(net))} FCFA ${tr('after fees')}`,
-      rate, fee: tr('Fee: {rate} · {amount} FCFA', { rate: localizePct('0.25%'), amount: fmtInt(fee) }),
+      toSub: `≈ ${fmtInt(floor100(net))} FCFA ${tr('after fees')}`,
+      rate, fee: tr('Fee: {rate} · {amount} FCFA', { rate: pct(TOTAL_FEE), amount: fmtInt(fee) }),
       rows: [
         [tr('Rate'), rate],
-        [tr('Mobile money fee'), `${localizePct('0.25%')} · ${fmtInt(fee)} FCFA`],
+        feeRow(amount),
         [tr('Network fee'), `${fmtInt(netFee)} FCFA`],
         [tr('Receiving wallet'), shortAddr(wallet)],
         [tr('Est. arrival'), tr('Instant')],
@@ -92,18 +94,18 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
   }
   // sell
   const gross = amount * crypto.fcfa;
-  const fee = gross * RAIL_FEE;
-  const get = round100(gross - fee);
+  const fee = feesOn(gross).total;
+  const get = floor100(gross - fee);
   const rate = `1 ${crypto.sym} = ${fmtInt(crypto.fcfa)} FCFA`;
   const p = provider;
   return {
     fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtInt(get),
     fromSub: `${tr('Balance')} ${balText} ${crypto.sym} · Max`,
     toSub: tr('Arrives in 1–2 minutes'),
-    rate, fee: tr('Fee: {rate} · {amount} FCFA', { rate: localizePct('0.25%'), amount: fmtInt(fee) }),
+    rate, fee: tr('Fee: {rate} · {amount} FCFA', { rate: pct(TOTAL_FEE), amount: fmtInt(fee) }),
     rows: [
       [tr('Rate'), rate],
-      [tr('Fiat rail fee'), `${localizePct('0.25%')} · ${fmtInt(fee)} FCFA`],
+      feeRow(gross),
       [tr('Payout account'), p ? `${p.name} ${p.number}` : '—'],
       [tr('Est. arrival'), tr('1–2 minutes')],
       [tr('You get'), `${fmtInt(get)} FCFA`],

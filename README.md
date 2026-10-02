@@ -97,6 +97,12 @@ The app is in **French** (Senegal, Cote d'Ivoire, Burkina Faso) with English kep
 - Not translated: the internal `/admin` page (English), Privy's own sign-in modal opened by "More sign-in options" (Privy only localizes wallet/card screens), and text stored in an order when it was created (an order made in French stays French if you later switch to English).
 - Server messages shown to users are translated on the client by matching the English message (see the last block of `fr.app.ts`).
 
+### Fees and revenue
+
+Customers pay **5%** of an order's value: **2.5% platform fee** (Relay's revenue) + **2.5% payment provider (PSP) fee** (passed through to the provider). `src/lib/fees.ts` drives the app's quotes (sell, buy, swap: a single `Fee 5%` line; the platform/PSP split is shown only in the admin Revenue tab), `worker/pricing.ts` decides what is actually paid out, and `test/pricing.test.ts` keeps the two equal. The customer's payout is rounded **down** to whole 100 FCFA, and the platform fee absorbs the rounding, so `payout + platform fee + PSP fee = gross` to the franc. Example: 1 000 USDT (600 000 FCFA) pays out 570 000 and splits 15 000 / 15 000.
+Each payout stores its split (`gross_fcfa`, `platform_fee_fcfa`, `psp_fee_fcfa`, migration 0007). The admin **Revenue** tab (`GET /api/admin/revenue?days=7|30|90|365|0`) shows, for a period: platform revenue, gross volume, PSP fees owed, total fees, a per-day chart, and breakdowns by asset and by payout provider, plus platform fees still **pending** (payouts not yet paid). Revenue is recognised when a payout is **paid**; failed and rejected payouts earn nothing.
+**Caveats:** only sells are server orders, so buy and swap fees aren't in the totals; payouts made before migration 0007 have no split and are counted separately (they were made at the old 0.25% fee); the PSP column is the fee charged to customers, not an invoice from the provider, so reconcile it with the provider's statements; limits still count the customer's payout amount (not the gross).
+
 ### Transaction limits
 
 `src/lib/limits.ts` defines the limits per user: 2M FCFA per day and 10M per month, with the per-transaction cap set equal to the daily limit until you decide on one.
