@@ -3,6 +3,8 @@
  * Privy does not document every payload field, so the accessors below are defensive: unknown shapes are
  * logged (without secrets) and acknowledged rather than failing, because a non-2xx makes Privy retry.
  */
+import { applyDeposit } from './orders';
+
 type Json = Record<string, unknown>;
 
 const obj = (v: unknown): Json => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : {});
@@ -60,11 +62,26 @@ export async function handleEvent(env: Env, event: PrivyEvent, eventId: string):
       return;
     }
     case 'wallet.funds_deposited': {
-      // A deposit to one of our users' wallets. Use `wallet:<address>` to find the user.
-      // TODO(orders): when a database exists, match this to an awaiting-deposit order and advance it.
-      const to = str(event.recipient) ?? str(obj(event.wallet).address);
-      const user = to ? await env.EVENTS.get(`wallet:${to.toLowerCase()}`) : null;
-      log('info', 'privy.wallet.funds_deposited', { eventId, userId: user, tx: str(event.transaction_hash), asset: str(event.asset) });
+      // A transfer into one of our wallets. If the receiving address is a sell order's deposit address, advance that order.
+      const recipient = str(event.recipient) ?? str(obj(event.wallet).address);
+      const asset = obj(event.asset);
+      const amount = str(event.amount);
+      const parsed = recipient && amount && /^\d+$/.test(amount) ? amount : null;
+      if (!recipient || !parsed) {
+        // shape we don't recognise: log the keys (not values) so it can be fixed, and acknowledge
+        log('warn', 'privy.wallet.funds_deposited.unparsed', { eventId, keys: Object.keys(event) });
+        return;
+      }
+      const type = str(asset.type) ?? (typeof event.asset === 'string' ? event.asset : undefined);
+      const out = await applyDeposit(env, {
+        recipient,
+        caip2: str(event.caip2),
+        assetAddress: str(asset.address),
+        isNative: !str(asset.address) && (!type || /native|eth|sol/i.test(type)),
+        amountUnits: BigInt(parsed),
+        txHash: str(event.transaction_hash),
+      });
+      log('info', 'privy.wallet.funds_deposited', { eventId, result: out.result, orderId: out.orderId, tx: str(event.transaction_hash) });
       return;
     }
     case 'transaction.confirmed':

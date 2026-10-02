@@ -23,7 +23,7 @@ const bytesToB64 = (bytes: ArrayBuffer): string => {
 };
 
 /** Constant-time string comparison (avoids leaking how many leading characters matched). */
-const safeEqual = (a: string, b: string): boolean => {
+export const safeEqual = (a: string, b: string): boolean => {
   const enc = new TextEncoder();
   const x = enc.encode(a);
   const y = enc.encode(b);

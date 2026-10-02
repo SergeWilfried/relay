@@ -27,12 +27,16 @@
           }
         },
         "vars": {
-            "LIVE": "false"
+            "LIVE": "false",
+            "PAYOUT_PROVIDER": "sandbox"
         },
         // KV: webhook idempotency (processed event ids) + a small user/wallet index.
         // `vite dev`/`wrangler dev` provision it locally; for production let `wrangler deploy` provision it
         // or run `npx wrangler kv namespace create relay-events` and add the id here.
-        "kv_namespaces": [{ "binding": "EVENTS" }]
-        // Secret (never put it in this file): npx wrangler secret put PRIVY_WEBHOOK_SIGNING_SECRET
+        "kv_namespaces": [{ "binding": "EVENTS" }],
+        // D1: server-side sell orders (see migrations/). Local: `pnpm db:migrate:local`. Production: `pnpm db:migrate`.
+        "d1_databases": [{ "binding": "DB", "database_name": "relay", "migrations_dir": "migrations" }]
+        // Secrets (never put these in this file): wrangler secret put PRIVY_WEBHOOK_SIGNING_SECRET | PRIVY_VERIFICATION_KEY | PRIVY_APP_ID | PRIVY_APP_SECRET
+        // LIVE="true" makes new sell orders create real Privy deposit wallets (needs PRIVY_APP_SECRET); "false" uses placeholder addresses.
         // Local: copy .dev.vars.example to .dev.vars
     }

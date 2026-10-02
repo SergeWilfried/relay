@@ -22,3 +22,5 @@
 /coverage/*
 .wrangler
 .dev.vars*
+.test-key.pem
+.test-pub.pem

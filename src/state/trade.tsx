@@ -21,6 +21,9 @@ interface TradeState {
   setProvider: (id: string) => void;
   wallet: Wallet;
   setWallet: (w: Wallet) => void;
+  /** mobile money number for sell payouts (E.164); null = not entered yet */
+  phone: string | null;
+  setPhone: (p: string) => void;
   amountOk: boolean;
   confirmAmount: () => void;
   switchTab: (t: Tab) => void;
@@ -54,6 +57,9 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const [amountOk, setAmountOk] = useState(() => remembered() !== null);
   // a pasted address is only valid for the network it was entered for
   const [custom, setCustom] = useState<{ address: string; net: string } | null>(null);
+  // live mode never pre-fills the placeholder numbers: a payout must go to a number the user typed
+  const [phone, setPhoneState] = useState<string | null>(() => loadState<string | null>('phone', null));
+  const setPhone = (p: string) => { setPhoneState(p); saveState('phone', p); };
   const [draft, setDraft] = useState<Order | null>(() => loadState<Order | null>('draft', null));
   useEffect(() => { saveState('draft', draft); }, [draft]);
 
@@ -87,19 +93,19 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const params = useMemo<QuoteParams>(() => ({ tab, from, to, provider, wallet: wallet.address, balance }), [tab, from, to, provider, wallet.address, balance]);
 
   const value = useMemo<TradeState>(() => ({
-    tab, amount, setAmount, from, to, setAsset, providerId, provider, wallet, setWallet,
+    tab, amount, setAmount, from, to, setAsset, providerId, provider, wallet, setWallet, phone, setPhone,
     setProvider: (id: string) => { setProviderId(id); saveProvider(id); },
     amountOk, confirmAmount: () => setAmountOk(true),
     switchTab, params, balance, draft,
     lockDraft: (quote, n) => {
-      const o = buildOrder(tab, from, to, provider, quote, n, wallet.address);
+      const o = buildOrder(tab, from, to, provider, quote, n, wallet.address, undefined, { phone: tab === 'sell' ? phone : null });
       setDraft(o);
       return o;
     },
-    requoteDraft: (quote) => setDraft((d) => (d ? buildOrder(d.tab, d.from, d.to, d.provider, quote, d.amount, d.wallet, { id: d.id, createdAt: d.createdAt }) : d)),
+    requoteDraft: (quote) => setDraft((d) => (d ? buildOrder(d.tab, d.from, d.to, d.provider, quote, d.amount, d.wallet, { id: d.id, createdAt: d.createdAt }, { phone: d.phone }) : d)),
     clearDraft: () => setDraft(null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [tab, amount, from, to, providerId, provider, amountOk, draft, wallet.address, wallet.custom, params, balance, switchTab]);
+  }), [tab, amount, from, to, providerId, provider, amountOk, draft, wallet.address, wallet.custom, phone, params, balance, switchTab]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

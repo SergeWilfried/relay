@@ -39,11 +39,17 @@ export interface Order {
   depositAddress: string | null;
   depositLive: boolean;
   depositTx: string | null;
+  /** true once the order exists on the server (live mode); the server then reports deposit progress */
+  synced: boolean;
+  /** sell orders: mobile money number the payout goes to (E.164) */
+  phone: string | null;
+  /** latest status reported by the server for synced orders (null until the first sync) */
+  server: { status: 'awaiting_deposit' | 'processing' | 'underpaid'; payout: string | null; payoutError: string | null; note: string | null } | null;
 }
 
 const short = (a: string) => `${a.slice(0, 5)}…${a.slice(-3)}`;
 
-export function buildOrder(tab: Tab, from: Asset, to: Asset, provider: Provider | null, quote: Quote, amount: number, wallet: string, keep?: { id: string; createdAt: number }): Order {
+export function buildOrder(tab: Tab, from: Asset, to: Asset, provider: Provider | null, quote: Quote, amount: number, wallet: string, keep?: { id: string; createdAt: number }, opts?: { phone?: string | null }): Order {
   const id = keep?.id ?? Date.now().toString(36);
   const now = Date.now();
   const hash = '0x4c9a…e2f7';
@@ -51,7 +57,7 @@ export function buildOrder(tab: Tab, from: Asset, to: Asset, provider: Provider 
     id, tab, from, to, provider: tab === 'swap' ? null : provider, wallet, quote, amount, hash,
     createdAt: keep?.createdAt ?? now, quoteExpiresAt: now + QUOTE_TTL_MS,
     submitted: false, awaitingDeposit: false, depositExpiresAt: null, startedAt: null, outcome: 'ok' as Outcome,
-    depositAddress: null as string | null, depositLive: false, depositTx: null as string | null,
+    depositAddress: null as string | null, depositLive: false, depositTx: null as string | null, synced: false, phone: (opts?.phone ?? null) as string | null, server: null as Order['server'],
   };
   const gross = fmtInt(Math.round(quote.fcfaGross / 100) * 100);
   if (tab === 'swap') {
@@ -91,6 +97,17 @@ export interface Progress { phase: Phase; /** index of the active step (3 = all 
 
 /** Order progress is a pure function of time, so it survives reloads and leaving the screen. */
 export function deriveProgress(o: Order, now: number): Progress {
+  // Orders registered with the server follow the server's payout status, not a timer.
+  if (o.synced) {
+    const s = o.server;
+    if (!s || s.status === 'awaiting_deposit') return { phase: 'awaiting_deposit', step: 0 };
+    if (s.status === 'underpaid') return { phase: 'failed', step: 0 };
+    if (s.payout === 'paid') return { phase: 'done', step: 3 };
+    if (s.payout === 'rejected') return { phase: 'failed', step: 1 };
+    if (s.payout === 'failed') return { phase: 'failed', step: 2 };
+    if (s.payout === 'approved' || s.payout === 'sending') return { phase: 'processing', step: 2 };
+    return { phase: 'processing', step: 1 }; // deposit confirmed, payout waiting for approval
+  }
   if (o.awaitingDeposit || o.startedAt === null) return { phase: 'awaiting_deposit', step: 0 };
   const elapsed = now - o.startedAt;
   const raw = Math.min(3, Math.floor(elapsed / SETTLE_MS));

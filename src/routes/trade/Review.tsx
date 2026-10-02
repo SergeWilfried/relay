@@ -6,6 +6,8 @@ import { fetchQuote, submitApi, useSubmit } from '../../lib/api';
 import { lenStep } from '../../lib/format';
 import { mmss, useNow, useOnline } from '../../lib/net';
 import { QUOTE_TTL_MS, submitDraft } from '../../lib/orders';
+import { useAuth } from '../../auth/AuthContext';
+import { createServerOrder } from '../../lib/serverOrders';
 import { useApp } from '../../state/app';
 import { useTrade } from '../../state/trade';
 
@@ -17,6 +19,7 @@ export default function Review() {
   const { draft, requoteDraft, clearDraft } = useTrade();
   const { kyc, addOrder } = useApp();
   const online = useOnline();
+  const auth = useAuth();
   const now = useNow(!!draft, 500);
   const { run, busy, error } = useSubmit();
   const [phase, setPhase] = useState<Phase>('live');
@@ -49,7 +52,13 @@ export default function Review() {
     if (kyc !== 'verified') { nav('/trade/verify'); return; }
     run(async () => {
       await submitApi();
-      const order = submitDraft(draft);
+      let order = submitDraft(draft);
+      // live mode: the server owns sell orders. It issues the deposit address and later advances the order
+      // from the chain's deposit webhook. If it can't, nothing is created locally and the user can retry.
+      if (auth.mode === 'privy' && order.tab === 'sell') {
+        const s = await createServerOrder(order);
+        order = { ...order, synced: true, depositAddress: s.depositAddress, depositLive: s.depositLive, depositExpiresAt: s.expiresAt };
+      }
       leaving.current = true;
       addOrder(order);
       nav(order.tab === 'sell' ? `/trade/deposit/${order.id}` : `/trade/status/${order.id}`, { replace: true });
