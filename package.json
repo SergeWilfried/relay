@@ -1,0 +1,36 @@
+{
+  "name": "relay",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "icons": "node scripts/icons.mjs",
+    "tokens": "node scripts/tokens.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/figtree": "^5.3.0",
+    "@fontsource/space-mono": "^5.3.0",
+    "@privy-io/react-auth": "^3.46.0",
+    "@solana-program/memo": "^0.15.0",
+    "@solana-program/system": "^0.15.0",
+    "@solana-program/token": "^0.17.0",
+    "@solana/kit": "^8.4.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vite-plugin-pwa": "^1.3.0"
+  }
+}

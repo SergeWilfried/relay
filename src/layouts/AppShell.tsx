@@ -1,0 +1,86 @@
+import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
+import { AccountIcon, ActivityIcon, MenuGrid, PoolIcon, TradeIcon } from '../components/Icons';
+import { useApp } from '../state/app';
+import { useTheme } from '../state/theme';
+import { initials, useAuth } from '../auth/AuthContext';
+import { InstallBanner } from '../components/InstallBanner';
+import { useInstall } from '../lib/pwa';
+import { useNow, useOnline } from '../lib/net';
+import { deriveProgress, inFlight } from '../lib/orders';
+
+const Logo = () => (
+  <Link to="/trade/swap" className="logo" aria-label="Relay home">
+    <div className="logo-mark">R</div><div className="logo-text">Relay</div>
+  </Link>
+);
+
+export function AppShell() {
+  const { kyc, orders } = useApp();
+  const auth = useAuth();
+  const ethAddr = auth.wallets.Ethereum ?? auth.wallets.Solana ?? null;
+  const online = useOnline();
+  const live = orders.filter((o) => inFlight(o, Date.now()));
+  const now = useNow(live.length > 0);
+  const active = orders.find((o) => inFlight(o, now));
+  const { theme, setTheme } = useTheme();
+  const { pathname } = useLocation();
+  const install = useInstall(); // listens for beforeinstallprompt for the whole session, even while the banner is hidden
+  const verified = kyc === 'verified';
+  const cls = ({ isActive }: { isActive: boolean }) => (isActive ? 'active' : '');
+
+  return (
+    <div className="app">
+      {/* mobile header */}
+      <header className="hd">
+        <Link to="/account" className="hd-btn" aria-label="Menu"><MenuGrid /></Link>
+        <Logo />
+        <Link to="/account" className="avatar" aria-label="Account">{initials(auth.email)}{verified && <span className="avatar-badge">✓</span>}</Link>
+      </header>
+
+      {/* desktop top bar */}
+      <header className="topbar">
+        <div className="topbar-l">
+          <Logo />
+          <nav className="nav" aria-label="Primary">
+            <NavLink to="/trade/swap" className={() => (pathname.startsWith('/trade') ? 'active' : '')}>Trade</NavLink>
+            <NavLink to="/pool" className={cls}>Pool</NavLink>
+            <NavLink to="/activity" className={cls}>Activity</NavLink>
+          </nav>
+        </div>
+        <div className="topbar-r">
+          <div className="seg" role="group" aria-label="Theme">
+            <button className={theme === 'light' ? 'on' : ''} onClick={() => setTheme('light')}>Light</button>
+            <button className={theme === 'dark' ? 'on' : ''} onClick={() => setTheme('dark')}>Dark</button>
+          </div>
+          <span className="pill net"><i className="dot" />Ethereum</span>
+          {verified && <span className="pill acc">✓ Verified</span>}
+          {ethAddr && (
+            <Link to="/account" className="pill mono" style={{ textDecoration: 'none' }}>
+              {ethAddr.slice(0, 5)}…{ethAddr.slice(-3)}{auth.mode === 'demo' ? ' · 2.84 ETH' : ''}
+            </Link>
+          )}
+          {!ethAddr && auth.email && <Link to="/account" className="pill" style={{ textDecoration: 'none' }}>{auth.email}</Link>}
+        </div>
+      </header>
+
+      <main className="scroll">
+        {/* stay out of the way mid-transaction */}
+        {!online && <div className="banner offline" role="status">You're offline. Quotes and new orders are paused until you reconnect.</div>}
+        {active && !/^\/trade\/(deposit|status)/.test(pathname) && (
+          <Link className="banner live" to={deriveProgress(active, now).phase === 'awaiting_deposit' ? `/trade/deposit/${active.id}` : `/trade/status/${active.id}`}>
+            <span>{deriveProgress(active, now).phase === 'awaiting_deposit' ? 'Waiting for your deposit' : 'Transaction in progress'} · {active.quote.summaryFrom} → {active.quote.summaryTo}</span><span aria-hidden>›</span>
+          </Link>
+        )}
+        {!/^\/trade\/(review|verify|deposit|status)/.test(pathname) && <InstallBanner {...install} />}
+        <Outlet />
+      </main>
+
+      <nav className="tabbar" aria-label="Primary">
+        <NavLink to="/trade/swap" className={() => (pathname.startsWith('/trade') ? 'active' : '')}><span className="bar" /><TradeIcon />Trade</NavLink>
+        <NavLink to="/pool" className={cls}><span className="bar" /><PoolIcon />Pool</NavLink>
+        <NavLink to="/activity" className={cls}><span className="bar" /><ActivityIcon />Activity</NavLink>
+        <NavLink to="/account" className={cls}><span className="bar" /><AccountIcon />Account</NavLink>
+      </nav>
+    </div>
+  );
+}

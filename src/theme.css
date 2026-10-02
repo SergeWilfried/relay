@@ -1,0 +1,32 @@
+@import '@fontsource-variable/figtree';
+@import '@fontsource/space-mono/400.css';
+@import '@fontsource/space-mono/700.css';
+
+:root {
+  --pg: #ECEBEF; --sh: #E2E1E7; --bd: #FFFFFF; --rw: #F4F4F6; --ch: #FFFFFF;
+  --ink: #17151C; --mut: #625F6B; --fnt: #8A8794; --ln: rgba(23,21,28,.09);
+  --acc: #7B3FF2; --accs: #F1EBFF; --acct: #6A2FE0; --cta: #17151C; --ctai: #FFFFFF;
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  --pg: #0D0C10; --sh: #1C1B22; --bd: #141318; --rw: #1F1E25; --ch: #2A2932;
+  --ink: #F3F2F6; --mut: #A3A0AD; --fnt: #7A7785; --ln: rgba(255,255,255,.08);
+  --acc: #8F5CFF; --accs: rgba(143,92,255,.18); --acct: #B597FF; --cta: #F3F2F6; --ctai: #141318;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0; background: var(--pg); color: var(--ink);
+  font-family: 'Figtree Variable', 'Figtree', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; overscroll-behavior: none;
+}
+button, input { font: inherit; color: inherit; }
+button { border: 0; background: none; padding: 0; cursor: pointer; text-align: inherit; }
+a { color: var(--acct); text-decoration: none; }
+a:hover { color: var(--acc); text-decoration: underline; }
+.mono { font-family: 'Space Mono', monospace; }
+.num { font-variant-numeric: tabular-nums; }
+@keyframes rspin { to { transform: rotate(360deg); } }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }

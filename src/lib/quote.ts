@@ -1,0 +1,112 @@
+import { ASSETS, ETH, type Asset, type Provider, type Tab } from './data';
+import { fmtCrypto, fmtInt, fmtRate } from './format';
+
+export const RAIL_FEE = 0.0025;
+export const shortAddr = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+const round100 = (n: number) => Math.round(n / 100) * 100;
+
+export interface QuoteInput {
+  tab: Tab;
+  amount: number;
+  /** swap: asset sent. buy/sell: the crypto asset. */
+  from: Asset;
+  /** swap: asset received. */
+  to: Asset;
+}
+
+export interface Quote {
+  fromAmt: string;
+  toAmt: string;
+  fromSub: string;
+  toSub: string;
+  rate: string;
+  fee: string;
+  rows: [string, string][];
+  summaryFrom: string;
+  summaryTo: string;
+  insufficient: boolean;
+  /** FCFA gross used in order steps */
+  fcfaGross: number;
+  toValue: number;
+}
+
+/**
+ * Local quote model. Swap for the quote API (debounced from the UI) —
+ * keep the returned shape and the screens won't change.
+ */
+export function getQuote(input: QuoteInput, provider: Provider | null, wallet: string, priceMult = 1): Quote {
+  const { tab, amount, to } = input;
+  // priceMult simulates the rate moving between quotes (used by the quote refresh)
+  const from: Asset = priceMult === 1 ? input.from : { ...input.from, fcfa: input.from.fcfa * priceMult };
+  const crypto = from;
+  if (tab === 'swap') {
+    const gross = amount * from.fcfa;
+    const fee = gross * RAIL_FEE;
+    const recv = (amount * from.fcfa) / to.fcfa;
+    const rate = `1 ${from.sym} = ${fmtRate(from.fcfa / to.fcfa)} ${to.sym} · ${fmtInt(from.fcfa)} FCFA`;
+    return {
+      fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtRate(recv),
+      fromSub: `≈ ${fmtInt(round100(gross))} FCFA · Balance ${fmtCrypto(from.balance)} ${from.sym}`,
+      toSub: `≈ ${fmtInt(round100(gross - fee))} FCFA after fees`,
+      rate, fee: 'Fee: 0.25% fiat rail · Slippage 0.5%',
+      rows: [
+        ['Rate', `1 ${from.sym} = ${fmtRate(from.fcfa / to.fcfa)} ${to.sym}`],
+        ['Network fee', '1,240 FCFA'],
+        ['Fiat rail fee', `0.25% · ${fmtInt(fee)} FCFA`],
+        ['Est. arrival', '~45 seconds'],
+        ['You receive', `${fmtRate(recv)} ${to.sym}`],
+      ],
+      summaryFrom: `${fmtCrypto(amount, 2, 8)} ${from.sym}`, summaryTo: `${fmtRate(recv)} ${to.sym}`,
+      insufficient: amount > from.balance, fcfaGross: gross, toValue: recv,
+    };
+  }
+  if (tab === 'buy') {
+    const fee = amount * RAIL_FEE;
+    const netFee = 710;
+    const net = Math.max(0, amount - fee - netFee);
+    const k = 10 ** crypto.dec;
+    const recv = Math.floor((net / crypto.fcfa) * k) / k;
+    const rate = `1 ${crypto.sym} = ${fmtInt(crypto.fcfa)} FCFA`;
+    const p = provider;
+    return {
+      fromAmt: fmtInt(amount), toAmt: fmtCrypto(recv, crypto.dec, crypto.dec),
+      fromSub: p ? `${p.name} ${p.number} · instant` : 'Pay from mobile money',
+      toSub: `≈ ${fmtInt(round100(net))} FCFA after fees`,
+      rate, fee: `Fee: 0.25% · ${fmtInt(fee)} FCFA`,
+      rows: [
+        ['Rate', rate],
+        ['Mobile money fee', `0.25% · ${fmtInt(fee)} FCFA`],
+        ['Network fee', `${fmtInt(netFee)} FCFA`],
+        ['Receiving wallet', shortAddr(wallet)],
+        ['Est. arrival', 'Instant'],
+        ['You receive', `${fmtCrypto(recv, crypto.dec, crypto.dec)} ${crypto.sym}`],
+      ],
+      summaryFrom: `${fmtInt(amount)} FCFA`, summaryTo: `${fmtCrypto(recv, crypto.dec, crypto.dec)} ${crypto.sym}`,
+      insufficient: false, fcfaGross: amount, toValue: recv,
+    };
+  }
+  // sell
+  const gross = amount * crypto.fcfa;
+  const fee = gross * RAIL_FEE;
+  const get = round100(gross - fee);
+  const rate = `1 ${crypto.sym} = ${fmtInt(crypto.fcfa)} FCFA`;
+  const p = provider;
+  return {
+    fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtInt(get),
+    fromSub: `Balance ${fmtCrypto(crypto.balance)} ${crypto.sym} · Max`,
+    toSub: 'Arrives in 1–2 minutes',
+    rate, fee: `Fee: 0.25% · ${fmtInt(fee)} FCFA`,
+    rows: [
+      ['Rate', rate],
+      ['Fiat rail fee', `0.25% · ${fmtInt(fee)} FCFA`],
+      ['Payout account', p ? `${p.name} ${p.number}` : '—'],
+      ['Est. arrival', '1–2 minutes'],
+      ['You get', `${fmtInt(get)} FCFA`],
+    ],
+    summaryFrom: `${fmtCrypto(amount, 2, 8)} ${crypto.sym}`, summaryTo: `${fmtInt(get)} FCFA`,
+    insufficient: amount > crypto.balance, fcfaGross: gross, toValue: get,
+  };
+}
+
+export const defaultAmount = (tab: Tab) => (tab === 'buy' ? '1500000' : '1.5');
+export const defaultAssets = (): { from: Asset; to: Asset } => ({ from: ETH, to: ASSETS[1] });

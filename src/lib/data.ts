@@ -1,0 +1,78 @@
+// Mock reference data. Replace with API responses.
+export type Tab = 'swap' | 'buy' | 'sell';
+
+export interface Asset {
+  sym: string;
+  net: string;
+  char: string;
+  color: string;
+  fcfa: number; // FCFA per 1 unit
+  balance: number;
+  explorer: string;
+  /** decimals shown for amounts of this asset */
+  dec: number;
+  /** logo under /public/tokens; falls back to the lettered circle */
+  logo?: string;
+  /** placeholder deposit address (production: per-order address from the API) */
+  deposit: string;
+}
+
+const EVM_ADDR = '0x8f3C4a92eE71B2d5C1f0A6b39C21d4E87a550c21';
+// No ETH logo supplied yet: add public/tokens/eth.png and set `logo` to use it.
+export const ETH: Asset = { sym: 'ETH', net: 'Ethereum', char: 'E', color: '#627EEA', fcfa: 1_652_400, balance: 2.84, dec: 4, explorer: 'https://etherscan.io/tx/', deposit: EVM_ADDR };
+export const SOL: Asset = { sym: 'SOL', net: 'Solana', char: 'S', color: '#9945FF', fcfa: 1_652_400 / 19.67, balance: 41.2, dec: 4, logo: '/tokens/sol.png', explorer: 'https://solscan.io/tx/', deposit: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU' };
+export const BTC: Asset = { sym: 'BTC', net: 'Bitcoin', char: 'B', color: '#F7931A', fcfa: 54_000_000, balance: 0.085, dec: 6, logo: '/tokens/btc.png', explorer: 'https://mempool.space/tx/', deposit: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq' };
+export const USDT: Asset = { sym: 'USDT', net: 'Ethereum', char: 'T', color: '#26A17B', fcfa: 600, balance: 1250, dec: 2, logo: '/tokens/usdt.png', explorer: 'https://etherscan.io/tx/', deposit: EVM_ADDR };
+export const USDC: Asset = { sym: 'USDC', net: 'Ethereum', char: 'U', color: '#2775CA', fcfa: 600, balance: 480, dec: 2, logo: '/tokens/usdc.png', explorer: 'https://etherscan.io/tx/', deposit: EVM_ADDR };
+export const ASSETS: Asset[] = [ETH, SOL, BTC, USDT, USDC];
+export const FCFA_COLOR = '#3C9A5F';
+
+export interface Provider {
+  id: string;
+  name: string;
+  char: string;
+  color: string;
+  fg: string;
+  number: string;
+}
+
+export const PROVIDERS: Provider[] = [
+  { id: 'orange', name: 'Orange Money', char: 'O', color: '#FF7900', fg: '#fff', number: '+225 07 89 45 89' },
+  { id: 'wave', name: 'Wave', char: 'W', color: '#1DC8FF', fg: '#fff', number: '+225 05 55 01 22' },
+  { id: 'mtn', name: 'MTN MoMo', char: 'M', color: '#FFCB05', fg: '#1a1a1a', number: '+225 05 44 12 76' },
+  { id: 'moov', name: 'Moov Money', char: 'M', color: '#0066B3', fg: '#fff', number: '+225 01 02 33 48' },
+];
+
+export const WALLET = '0x8f3C4a92eE71B2d5C1f0A6b39C21d4E87a550c21';
+export const WALLET_SHORT = '0x8f3C…9c21';
+
+export interface Pool {
+  id: string;
+  name: string;
+  char: string;
+  color: string;
+  blurb: string;
+  tvl: string;
+  apy: string;
+  util: number;
+  feeRate: string;
+  volume: string;
+  logo?: string;
+}
+
+export const POOLS: Pool[] = [
+  { id: 'fcfa', name: 'FCFA rail', char: 'F', color: FCFA_COLOR, blurb: 'Deposit FCFA · mobile money float · TVL 512M', tvl: '512M FCFA', apy: '8.4%', util: 72, feeRate: '0.25%', volume: '96M FCFA' },
+  { id: 'eth', name: 'ETH', char: 'E', color: ETH.color, blurb: 'Deposit ETH · 0.25% fee · TVL 198M', tvl: '198M FCFA', apy: '6.1%', util: 54, feeRate: '0.25%', volume: '31M FCFA' },
+  { id: 'sol', name: 'SOL', char: 'S', color: SOL.color, logo: SOL.logo, blurb: 'Deposit SOL · 0.25% fee · TVL 132M', tvl: '132M FCFA', apy: '7.3%', util: 61, feeRate: '0.25%', volume: '22M FCFA' },
+];
+
+/**
+ * Stand-ins for the pool earnings API. Empty until the backend reports payouts,
+ * so a new provider sees empty states rather than invented history.
+ */
+export const FEES_30D = 0;
+export const DAILY_FEES: number[] = []; // last 7 days, FCFA
+export const FEES_BY_POOL: { name: string; amount: number }[] = [];
+
+/** Placeholder: replace with the real support address. */
+export const SUPPORT_EMAIL = 'support@relay.example';
