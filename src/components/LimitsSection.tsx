@@ -7,7 +7,7 @@ function Meter({ label, u, resets }: { label: string; u: Usage; resets: string }
   const { t } = useT();
   const level = u.pct >= 100 ? 'full' : u.pct >= 80 ? 'high' : '';
   return (
-    <div className="limit">
+    <div className="field limit">
       <div className="limit-top">
         <div className="limit-l">{label}</div>
         <div className="limit-v num">{t('{used} / {limit} FCFA', { used: fmtInt(u.used), limit: fmtInt(u.limit) })}</div>
