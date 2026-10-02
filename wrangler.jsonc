@@ -25,5 +25,8 @@
           "issue_detection": {
             "enabled": true
           }
+        },
+        "vars": {
+            "LIVE": "false"
         }
     }
