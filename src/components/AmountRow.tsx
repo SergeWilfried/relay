@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { AssetChip } from './AssetChip';
 import { fmtInt, parseAmount, sanitizeAmount } from '../lib/format';
 
-interface Chip { sym: string; net: string; char: string; color: string; logo?: string; onClick?: () => void }
+interface Chip { sym: string; net: string; char: string; color: string; logo?: string; badge?: string; onClick?: () => void }
 
 interface Props {
   label: string;

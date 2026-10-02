@@ -23,6 +23,9 @@ export const SOL: Asset = { sym: 'SOL', net: 'Solana', char: 'S', color: '#9945F
 export const BTC: Asset = { sym: 'BTC', net: 'Bitcoin', char: 'B', color: '#F7931A', fcfa: 54_000_000, balance: 0.085, dec: 6, logo: '/tokens/btc.png', explorer: 'https://mempool.space/tx/', deposit: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq' };
 export const USDT: Asset = { sym: 'USDT', net: 'Ethereum', char: 'T', color: '#26A17B', fcfa: 600, balance: 1250, dec: 2, logo: '/tokens/usdt.png', explorer: 'https://etherscan.io/tx/', deposit: EVM_ADDR };
 export const USDC: Asset = { sym: 'USDC', net: 'Ethereum', char: 'U', color: '#2775CA', fcfa: 600, balance: 480, dec: 2, logo: '/tokens/usdc.png', explorer: 'https://etherscan.io/tx/', deposit: EVM_ADDR };
+/** Logo of the chain an asset lives on (shown as the corner badge on the token chip). */
+export const NETWORK_LOGO: Record<string, string> = { Ethereum: '/tokens/eth.png', Solana: '/tokens/sol.png', Bitcoin: '/tokens/btc.png' };
+
 export const ASSETS: Asset[] = [ETH, SOL, BTC, USDT, USDC];
 export const FCFA_COLOR = '#3C9A5F';
 
@@ -65,7 +68,12 @@ export const POOLS: Pool[] = [
   { id: 'fcfa', name: 'FCFA rail', char: 'F', color: FCFA_COLOR, blurb: 'Deposit FCFA · mobile money float · TVL 512M', tvl: '512M FCFA', apy: '8.4%', util: 72, feeRate: '0.25%', volume: '96M FCFA' },
   { id: 'eth', name: 'ETH', char: 'E', color: ETH.color, logo: ETH.logo, blurb: 'Deposit ETH · 0.25% fee · TVL 198M', tvl: '198M FCFA', apy: '6.1%', util: 54, feeRate: '0.25%', volume: '31M FCFA' },
   { id: 'sol', name: 'SOL', char: 'S', color: SOL.color, logo: SOL.logo, blurb: 'Deposit SOL · 0.25% fee · TVL 132M', tvl: '132M FCFA', apy: '7.3%', util: 61, feeRate: '0.25%', volume: '22M FCFA' },
+  { id: 'usdt', name: 'USDT', char: USDT.char, color: USDT.color, logo: USDT.logo, blurb: 'Deposit USDT · 0.25% fee · TVL 74M', tvl: '74M FCFA', apy: '5.2%', util: 48, feeRate: '0.25%', volume: '14M FCFA' },
+  { id: 'usdc', name: 'USDC', char: USDC.char, color: USDC.color, logo: USDC.logo, blurb: 'Deposit USDC · 0.25% fee · TVL 61M', tvl: '61M FCFA', apy: '4.9%', util: 43, feeRate: '0.25%', volume: '11M FCFA' },
 ];
+
+/** Total value locked across pools, in millions of FCFA (parsed from each pool's `tvl`). */
+export const totalTvlMillions = () => POOLS.reduce((n, p) => n + (parseFloat(p.tvl) || 0), 0);
 
 /**
  * Stand-ins for the pool earnings API. Empty until the backend reports payouts,

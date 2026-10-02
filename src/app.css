@@ -76,7 +76,26 @@ button.chip { cursor: pointer; }
 .chip-s { font-weight: 700; font-size: 14px; }
 .chip-n { font-weight: 500; font-size: 11px; color: var(--mut); white-space: nowrap; }
 .chip svg { flex: none; color: var(--mut); }
-@media (min-width: 680px) { .chip { min-width: 150px; } .amt-val { font-size: 24px; } }
+@media (min-width: 680px) { .chip { min-width: 150px; } .amt-val { font-size: 24px; } .chip-badge { display: none; } }
+
+/* token chip: avatar + corner badge */
+.chip-av { position: relative; flex: none; display: flex; }
+.chip-badge { position: absolute; right: -6px; bottom: -5px; box-sizing: content-box; width: 10px; height: 10px; padding: 2px; border-radius: 7px; background: #F1F1F3; border: 2px solid var(--ch); object-fit: contain; }
+
+/* phones: compact pill (logo + network badge + symbol) */
+@media (max-width: 679px) {
+  .chip { min-width: 0; gap: 10px; padding: 6px 16px 6px 6px; border-radius: 999px; }
+  .chip .chip-av .chip-img, .chip .chip-av .chip-dot { width: 36px !important; height: 36px !important; font-size: 14px !important; }
+  .chip .chip-n, .chip > svg { display: none; }
+  .chip .chip-s { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+}
+
+/* compact pill at every width (asset picker) */
+.chip.compact { min-width: 0; gap: 10px; padding: 6px 16px 6px 6px; border-radius: 999px; }
+.chip.compact .chip-av .chip-img, .chip.compact .chip-av .chip-dot { width: 36px !important; height: 36px !important; font-size: 14px !important; }
+.chip.compact .chip-n, .chip.compact > svg { display: none; }
+.chip.compact .chip-s { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+.chip.compact .chip-badge { display: block; }
 
 .timeline { display: flex; flex-direction: column; gap: 12px; margin: 2px 0 2px 18px; padding: 12px 0 12px 18px; border-left: 1.5px solid var(--ln); }
 .tl-row { display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 12.5px; color: var(--mut); }

@@ -5,7 +5,7 @@ import { AssetPicker } from '../../components/AssetPicker';
 import { FieldRow } from '../../components/FieldRow';
 import { ProviderGrid } from '../../components/ProviderGrid';
 import { RateTimeline } from '../../components/RateTimeline';
-import { FCFA_COLOR, type Asset, type Tab } from '../../lib/data';
+import { FCFA_COLOR, NETWORK_LOGO, type Asset, type Tab } from '../../lib/data';
 import { fmtCrypto, parseAmount } from '../../lib/format';
 import { useQuote } from '../../lib/api';
 import { useOnline } from '../../lib/net';
@@ -56,8 +56,8 @@ export default function TradeForm() {
   const cta = !online ? "You're offline" : failed ? 'Quote unavailable' : q.insufficient && !zero ? 'Insufficient balance' : needAmt ? 'Confirm amount' : needProv ? 'Choose a provider' : needPhone ? 'Add your mobile money number' : needWallet ? 'Add receiving address' : CTA[tab];
   const disabled = needPhone || needWallet || !online || failed || zero || stale || q.insufficient || needProv;
 
-  const crypto = (a: Asset): { sym: string; net: string; char: string; color: string; logo?: string; onClick?: () => void } => ({ sym: a.sym, net: a.net, char: a.char, color: a.color, logo: a.logo });
-  const fcfa = (net: string) => ({ sym: 'FCFA', net, char: 'F', color: FCFA_COLOR, logo: fcfaAvatar.logo });
+  const crypto = (a: Asset): { sym: string; net: string; char: string; color: string; logo?: string; badge?: string; onClick?: () => void } => ({ sym: a.sym, net: a.net, char: a.char, color: a.color, logo: a.logo, badge: NETWORK_LOGO[a.net] });
+  const fcfa = (net: string) => ({ sym: 'FCFA', net, char: 'F', color: FCFA_COLOR, logo: fcfaAvatar.logo, badge: t.provider?.logo });
   const provNet = t.provider?.name ?? 'Mobile money';
 
   const fromChip = tab === 'buy' ? fcfa(provNet) : { ...crypto(t.from), onClick: () => setPicker('from') };
