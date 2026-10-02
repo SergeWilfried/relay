@@ -59,6 +59,8 @@ export const RULES: Rule[] = [
 		when: { country_changed: true }, action: { type: 'hold', hours: 24 }, user_message: 'For your security, your payout is on hold for 24 hours after a sign-in from a new country.' },
 	{ id: 'D-02', version: 1, mode: 'shadow', phase: 5, description: 'Payout number differs from the ones used before: hold 48 h',
 		when: { payout_number_changed: true }, action: { type: 'hold', hours: 48 }, user_message: 'For your security, a payout to a new number is on hold for 48 hours.' },
+	{ id: 'D-11', version: 1, mode: 'shadow', phase: 5, description: 'Clef (C-04) flagged a laundering pattern: hold payouts until an analyst clears the flag (the P-06 effect)',
+		when: { clef_flag_active: true }, action: { type: 'hold' }, user_message: 'Your payout is under review, usually under 2 hours.' },
 	{ id: 'D-09', version: 1, mode: 'shadow', phase: 5, description: 'Limit probing: 3+ requests within 10% of the per-transaction limit in 7 days',
 		when: { near_limit_requests_7d: { gte: 3 } }, action: { type: 'hold' }, user_message: 'Your payout is under review, usually under 2 hours.' },
 ];
@@ -68,6 +70,8 @@ export interface BaseFacts {
 	amount_fcfa: number; country: string | null; user_status: string; account_age_days: number; tier: number;
 	day_fcfa: number; month_fcfa: number; open_orders: number; orders_last_hour: number;
 	country_changed: boolean; payout_number_changed: boolean;
+	/** Clef (C-04) flagged a pattern in this user's recent activity and an analyst hasn't cleared it */
+	clef_flag_active: boolean;
 	/** earlier requests in the last 7 days between 90% and 100% of the per-transaction limit (this request is added by evaluate) */
 	prior_near_limit_7d: number;
 }
@@ -165,13 +169,13 @@ export const COUNTED = `o.user_id = ?1 AND o.amount_fcfa IS NOT NULL AND o.statu
 	AND NOT (o.status = 'awaiting_deposit' AND o.expires_at < ?2)
 	AND COALESCE((SELECT p.status FROM payouts p WHERE p.order_id = o.id), '') NOT IN ('rejected', 'failed')`;
 
-export interface Profile { firstSeenAt: number; lastCountry: string | null; status: string }
+export interface Profile { firstSeenAt: number; lastCountry: string | null; status: string; clefFlag: boolean }
 
 /** Creates the profile on first sight (account age starts here) and returns it. */
 export async function ensureProfile(env: Env, userId: string, country: string | null, now: number): Promise<Profile> {
 	await env.DB.prepare(`INSERT OR IGNORE INTO user_profile (user_id, first_seen_at, last_country, updated_at) VALUES (?, ?, ?, ?)`).bind(userId, now, country, now).run();
-	const r = await env.DB.prepare(`SELECT first_seen_at, last_country, status FROM user_profile WHERE user_id = ?`).bind(userId).first<{ first_seen_at: number; last_country: string | null; status: string }>();
-	return { firstSeenAt: r!.first_seen_at, lastCountry: r!.last_country, status: r!.status };
+	const r = await env.DB.prepare(`SELECT first_seen_at, last_country, status, clef_flag FROM user_profile WHERE user_id = ?`).bind(userId).first<{ first_seen_at: number; last_country: string | null; status: string; clef_flag: string | null }>();
+	return { firstSeenAt: r!.first_seen_at, lastCountry: r!.last_country, status: r!.status, clefFlag: !!r!.clef_flag };
 }
 
 export async function loadModes(env: Env): Promise<Record<string, Mode>> {
@@ -214,6 +218,7 @@ export async function loadFacts(env: Env, userId: string, input: { amountFcfa: n
 		// a first-ever number is the baseline, not a change
 		payout_number_changed: (phones?.total ?? 0) > 0 && (phones?.same ?? 0) === 0,
 		prior_near_limit_7d: near?.n ?? 0,
+		clef_flag_active: profile.clefFlag,
 	};
 }
 

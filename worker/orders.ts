@@ -1,5 +1,5 @@
 import { normalizeAddress, SELL_ASSETS, toUnits } from './assets';
-import { alert } from './alerts';
+import { notify } from './notify';
 import { createDepositWallet } from './depositWallet';
 import { sellPayoutFcfa } from './pricing';
 import { COUNTED, ensureProfile, evaluate, loadFacts, loadModes, logDecision, RuleDenied, windowStarts, type Outcome } from './rules';
@@ -58,7 +58,7 @@ const OPERATORS = new Set(['orange', 'wave', 'pispi', 'moov']);
 const PHONE = /^\+\d{8,15}$/;
 
 /** Idempotent per (user, id): retrying the same request returns the same order and deposit address. */
-export async function createSellOrder(env: Env, userId: string, input: CreateOrderInput, country: string | null = null): Promise<OrderView> {
+export async function createSellOrder(env: Env, userId: string, input: CreateOrderInput, country: string | null = null, defer: (p: Promise<unknown>) => void = (p) => void p): Promise<OrderView> {
 	const id = typeof input.id === 'string' ? input.id : '';
 	const asset = typeof input.asset === 'string' ? SELL_ASSETS[input.asset] : undefined;
 	const amount = typeof input.amount === 'string' ? input.amount : typeof input.amount === 'number' ? String(input.amount) : '';
@@ -108,7 +108,8 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 		return deny(env, userId, id, lost);
 	}
 	await logDecision(env, { userId, orderId: id, outcome });
-	if (hold) await alert(env, { level: 'info', title: 'Payout will be held for review', details: { order: id, rules: hold.ruleIds.join(', '), amountFcfa, until: hold.hours === null ? 'released by an analyst' : `${hold.hours} h` } });
+	// not awaited: triage may call a model, and the customer's request must not wait for an alert
+	if (hold) defer(notify(env, { level: 'info', title: 'Payout will be held for review', details: { order: id, rules: hold.ruleIds.join(', '), amountFcfa, until: hold.hours === null ? 'released by an analyst' : `${hold.hours} h` } }));
 	if (country) await env.DB.prepare(`UPDATE user_profile SET last_country = ?, updated_at = ? WHERE user_id = ?`).bind(country, now, userId).run();
 	const row = await env.DB.prepare(`${SELECT_ORDER} WHERE o.id = ?`).bind(id).first<OrderRow>();
 	return view(row!);

@@ -1,4 +1,4 @@
-import { alert } from './alerts';
+import { notify } from './notify';
 import { SELL_ASSETS } from './assets';
 import { classifyResponse, erc20TransferData, SOL_FEE_LAMPORTS, solanaTransferTx, toHex, type Sent } from './sweepTx';
 
@@ -124,8 +124,8 @@ export async function processSweep(env: Env, orderId: string): Promise<SweepRow 
 	log('sweep.result', { order: orderId, state: out.state });
 	const now = await env.DB.prepare('SELECT status, error FROM sweeps WHERE order_id = ?').bind(orderId).first<{ status: SweepStatus; error: string | null }>();
 	const details = { order: orderId, asset: s.asset, amountUnits: s.amount_units, chain: s.chain, error: now?.error };
-	if (now?.status === 'unknown') await alert(env, { level: 'critical', title: 'Sweep outcome unknown: funds may have moved, check the chain', details });
-	else if (now?.status === 'failed') await alert(env, { level: 'warning', title: 'Sweep failed: funds are still in the deposit wallet', details });
+	if (now?.status === 'unknown') await notify(env, { level: 'critical', title: 'Sweep outcome unknown: funds may have moved, check the chain', details });
+	else if (now?.status === 'failed') await notify(env, { level: 'warning', title: 'Sweep failed: funds are still in the deposit wallet', details });
 	return env.DB.prepare('SELECT * FROM sweeps WHERE order_id = ?').bind(orderId).first<SweepRow>();
 }
 

@@ -1,4 +1,4 @@
-import { alert } from './alerts';
+import { notify } from './notify';
 import { holdActive } from './orders';
 import { getProvider } from './payout';
 
@@ -96,14 +96,14 @@ export async function executePayout(env: Env, id: string): Promise<PayoutRow> {
 		else if (out.state === 'pending') await transition(env, id, ['sending'], `provider_ref = ?`, out.providerRef); // stays 'sending' until the webhook
 		else {
 			await transition(env, id, ['sending'], `status = 'failed', error = ?`, out.error);
-			await alert(env, { level: 'warning', title: 'Payout failed: the provider refused it', details: { payout: id, order: row.order_id, amountFcfa: row.amount_fcfa, error: out.error } });
+			await notify(env, { level: 'warning', title: 'Payout failed: the provider refused it', details: { payout: id, order: row.order_id, amountFcfa: row.amount_fcfa, error: out.error } });
 		}
 		log('payout.result', { id, state: out.state });
 	} catch (e) {
 		// Unknown outcome: money may have moved. Leave it in 'sending' for a human; do NOT retry automatically.
 		await transition(env, id, ['sending'], `error = ?`, `UNKNOWN OUTCOME: ${e instanceof Error ? e.message : String(e)}`);
 		console.error(JSON.stringify({ msg: 'payout.unknown_outcome', id }));
-		await alert(env, { level: 'critical', title: 'Payout outcome unknown: money may have moved, check the provider', details: { payout: id, order: row.order_id, amountFcfa: row.amount_fcfa } });
+		await notify(env, { level: 'critical', title: 'Payout outcome unknown: money may have moved, check the provider', details: { payout: id, order: row.order_id, amountFcfa: row.amount_fcfa } });
 	}
 	return (await getPayout(env, id))!;
 }
@@ -114,6 +114,6 @@ export async function settleFromWebhook(env: Env, reference: string, state: 'pai
 		? await transition(env, reference, ['sending'], `status = 'paid', paid_at = ?`, Date.now())
 		: await transition(env, reference, ['sending'], `status = 'failed', error = ?`, error ?? 'Rejected by provider');
 	log('payout.webhook', { reference, state, applied: ok });
-	if (ok && state === 'failed') await alert(env, { level: 'warning', title: 'Payout failed: the provider reported a failure', details: { payout: reference, error } });
+	if (ok && state === 'failed') await notify(env, { level: 'warning', title: 'Payout failed: the provider reported a failure', details: { payout: reference, error } });
 	return ok;
 }

@@ -3,12 +3,15 @@ import { BadRequest, createSellOrder, getOrder, listOrders } from './orders';
 import { approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
 import { getProvider } from './payout';
 import { ensureProfile, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
+import { clearClefFlag, runPatternReview } from './clefBatch';
+import { POINTS } from './clef';
 import { listSweeps, resolveSweep, retrySweep, runSweeps, SweepConflict } from './sweep';
 import { handleEvent, parseEvent } from './privy';
 import { safeEqual, verifySvix, WebhookVerificationError } from './svix';
 
 // Static assets are served by Cloudflare; this Worker only runs for /api/* (see run_worker_first in wrangler.jsonc).
 
+const DAILY_CRON = '0 3 * * *'; // keep in sync with wrangler.jsonc triggers
 const MAX_BODY_BYTES = 256 * 1024;
 const DEDUPE_TTL_SECONDS = 7 * 24 * 60 * 60; // Privy retries for about a day; keep ids longer than that
 
@@ -68,14 +71,29 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 
 	if (pathname === '/api/admin/rules' && request.method === 'GET') {
 		const modes = await loadModes(env);
-		return json({ rules: RULES.map((r) => ({ id: r.id, version: r.version, phase: r.phase, description: r.description, action: r.action, configuredMode: r.mode, mode: modes[r.id] ?? r.mode })) });
+		return json({
+			rules: RULES.map((r) => ({ id: r.id, version: r.version, phase: r.phase, description: r.description, action: r.action, configuredMode: r.mode, mode: modes[r.id] ?? r.mode })),
+			clefPoints: Object.values(POINTS).map((p) => ({ id: p.id, version: p.version, model: p.model, description: p.description, configuredMode: p.mode, mode: modes[p.id] ?? p.mode, enabled: (env.CLEF_ENABLED as string) === 'true' })),
+		});
 	}
 	const rm = /^\/api\/admin\/rules\/([A-Z]-\d{2})\/mode$/.exec(pathname);
 	if (rm && request.method === 'PUT') {
 		const body = (await request.json().catch(() => ({}))) as { mode?: unknown };
-		if (!RULES.some((r) => r.id === rm[1]) || (body.mode !== 'shadow' && body.mode !== 'enforce')) return json({ error: 'Unknown rule or mode (shadow|enforce)' }, 400);
+		if (!(RULES.some((r) => r.id === rm[1]) || rm[1]! in POINTS) || (body.mode !== 'shadow' && body.mode !== 'enforce')) return json({ error: 'Unknown rule or mode (shadow|enforce)' }, 400);
 		await setRuleMode(env, rm[1]!, body.mode);
 		return json({ id: rm[1], mode: body.mode });
+	}
+	if (pathname === '/api/admin/clef/calls' && request.method === 'GET') {
+		const point = url.searchParams.get('point');
+		const { results } = await (point ? env.DB.prepare('SELECT * FROM clef_calls WHERE point = ? ORDER BY id DESC LIMIT 100').bind(point) : env.DB.prepare('SELECT * FROM clef_calls ORDER BY id DESC LIMIT 100')).all();
+		return json({ calls: results });
+	}
+	if (pathname === '/api/admin/clef/run-review' && request.method === 'POST') return json(await runPatternReview(env));
+	const cf = /^\/api\/admin\/users\/([^/]{1,200})\/clef-flag\/clear$/.exec(pathname);
+	if (cf && request.method === 'POST') {
+		const body = (await request.json().catch(() => ({}))) as { note?: unknown };
+		if (typeof body.note !== 'string' || !body.note) return json({ error: 'note is required' }, 400);
+		return json({ cleared: await clearClefFlag(env, decodeURIComponent(cf[1]!), body.note) });
 	}
 	const um = /^\/api\/admin\/users\/([^/]{1,200})\/status$/.exec(pathname);
 	if (um && request.method === 'POST') {
@@ -132,7 +150,7 @@ async function payoutWebhook(request: Request, env: Env): Promise<Response> {
 }
 
 /** Authenticated order API. Orders are only ever visible to the user that created them. */
-async function ordersApi(request: Request, env: Env, pathname: string): Promise<Response> {
+async function ordersApi(request: Request, env: Env, ctx: ExecutionContext, pathname: string): Promise<Response> {
 	let userId: string;
 	try { userId = await authenticate(request, env); }
 	catch (e) {
@@ -148,7 +166,7 @@ async function ordersApi(request: Request, env: Env, pathname: string): Promise<
 		let input: unknown;
 		try { input = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
 		if (!input || typeof input !== 'object') return json({ error: 'Invalid JSON' }, 400);
-		try { return json(await createSellOrder(env, userId, input as Record<string, unknown> as never, countryOf(request)), 201); }
+		try { return json(await createSellOrder(env, userId, input as Record<string, unknown> as never, countryOf(request), (p) => ctx.waitUntil(p)), 201); }
 		catch (e) {
 			if (e instanceof BadRequest) return json({ error: e.message }, 400);
 			if (e instanceof RuleDenied) return json({ error: e.message, rules: e.ruleIds }, e.status as 403 | 422 | 429);
@@ -167,7 +185,7 @@ async function ordersApi(request: Request, env: Env, pathname: string): Promise<
 }
 
 export default {
-	async fetch(request, env): Promise<Response> {
+	async fetch(request, env, ctx): Promise<Response> {
 		const { pathname } = new URL(request.url);
 		try {
 			if (pathname === '/api/health') return json({ ok: true });
@@ -178,7 +196,7 @@ export default {
 			}
 			if (pathname.startsWith('/api/admin/')) return await adminApi(request, env, pathname, new URL(request.url));
 			if (pathname === '/api/webhooks/payout') return request.method === 'POST' ? await payoutWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
-			if (pathname === '/api/orders' || pathname.startsWith('/api/orders/')) return await ordersApi(request, env, pathname);
+			if (pathname === '/api/orders' || pathname.startsWith('/api/orders/')) return await ordersApi(request, env, ctx, pathname);
 			if (pathname.startsWith('/api/')) return json({ error: 'Not found' }, 404);
 			return new Response(null, { status: 404 });
 		} catch (e) {
@@ -187,7 +205,9 @@ export default {
 		}
 	},
 	/** Cron trigger (wrangler.jsonc "triggers"): forwards confirmed deposits to the treasury. */
-	async scheduled(_event, env, ctx): Promise<void> {
+	async scheduled(event, env, ctx): Promise<void> {
+		// the daily cron is Clef's activity review (C-04); the 5-minute cron is sweeps
+		if (event.cron === DAILY_CRON) { ctx.waitUntil(runPatternReview(env).then((r) => console.log(JSON.stringify({ msg: 'clef.review', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'clef.review_failed', error: e instanceof Error ? e.message : String(e) })))); return; }
 		ctx.waitUntil(runSweeps(env).then((r) => console.log(JSON.stringify({ msg: 'sweep.run', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'sweep.run_failed', error: e instanceof Error ? e.message : String(e) }))));
 	},
 } satisfies ExportedHandler<Env>;

@@ -170,7 +170,22 @@ A cron trigger (every 5 minutes, `wrangler.jsonc` `triggers`) and `POST /api/adm
 
 ### Alerts (`worker/alerts.ts`)
 
-Things a person must look at are written to the Worker log (`msg: "alert"`) and, if `ALERT_WEBHOOK_URL` is set (a Slack or Discord incoming-webhook URL, kept as a secret), POSTed there (`text`, `content`, `level`, `title`, `details`). They fire once, on the transition: **critical** for a sweep or payout with an unknown outcome (money may have moved); **warning** for a failed sweep or payout (a payout failure reported by the provider webhook too); **info** when a rule puts a payout on hold. Payloads hold order ids, assets, amounts and rule ids only: no phone numbers or user ids. A failing webhook is logged and never breaks the operation. Not built: email or SMS, escalation, and alerts for payouts waiting a long time for approval.
+Things a person must look at are written to the Worker log (`msg: "alert"`) and, if `ALERT_WEBHOOK_URL` is set (a Slack or Discord incoming-webhook URL, kept as a secret), POSTed there (`text`, `content`, `level`, `title`, `details`). They fire once, on the transition: **critical** for a sweep or payout with an unknown outcome (money may have moved); **warning** for a failed sweep or payout (a payout failure reported by the provider webhook too); **info** when a rule puts a payout on hold. Payloads hold order ids, assets, amounts and rule ids only (no phone numbers); only the Clef pattern alerts carry a user id, so an analyst knows whom to review. A failing webhook is logged and never breaks the operation. Warning and info alerts go through Clef triage when enabled (see below). Not built: email or SMS, escalation, and alerts for payouts waiting a long time for approval.
+
+### Clef: the judgment layer (`worker/clef.ts`)
+
+[Clef](https://developers.cloudflare.com/workers-ai/models/clef/) is a Workers AI decision model (`@cf/cloudflare/clef` and `clef-flash`, called through the `AI` binding). It takes a state and typed questions and returns a probability per option. As in the matrix, it **only advises**: it never signs, moves funds, blocks or freezes, and it has no hand on Privy policies. A person (or an enforced rule) acts on what it says.
+
+Off by default: set `CLEF_ENABLED` to `"true"` (`wrangler.jsonc` vars). Calls are billed per token on your Cloudflare account, and local dev calls the real model. Both points start in **shadow** mode (the call is made and logged, nothing changes) and are promoted like rules: `PUT /api/admin/rules/C-05/mode`. Any error, timeout (8 s) or malformed answer returns null and everything carries on as it did without Clef.
+
+| Point | Model | What it does | Auto-action |
+|---|---|---|---|
+| **C-05** alert triage | clef-flash | rates each warning/info alert false positive / review / urgent and adds `clef: …` to the alert | enforce mode: an **info** alert that is ≥ 0.95 a false positive is closed with a log line (`alert.auto_closed`). Critical alerts skip Clef entirely; warnings are never auto-closed |
+| **C-04** daily review (cron 03:00 UTC, or `POST /api/admin/clef/run-review`) | clef | reviews each user with 2+ cash-outs in 7 days: none / mule / round trip / structuring | enforce mode: a pattern ≥ 0.75 sets the user's flag. Rule **D-11** (its own mode, shadow by default) turns the flag into a payout hold until an analyst runs `POST /api/admin/users/:id/clef-flag/clear {note}` |
+
+Promote in two steps: C-04 to enforce (flags get stored), then D-11 to enforce (flags hold payouts). In shadow, C-04 sends an info alert saying what it would have flagged.
+What Clef sees is pseudonymous: payout numbers become "number 1, 2, …", times are hours ago, no phone digits or names. Every call (point, version, mode, the questions and state sent, the answers, model, tokens, latency, error) is stored in `clef_calls` (`GET /api/admin/clef/calls[?point=]`); `GET /api/admin/rules` lists the points with their effective mode. Run `pnpm db:migrate:local` / `pnpm db:migrate` for migration 0006.
+**Not built:** C-01 (signup risk), C-02 (receipt images; the model supports them), C-03 (address risk) and C-06 (sanctions/PEP match) need data that isn't server-side yet; C-07 (support tickets). Clef is only given sell orders, so it can't see round trips that involve buying. Treat its thresholds as starting points and calibrate them on shadow data (14 days) before enforcing; a flag's confidence is often modest (the test run returned 0.34 to 0.57), so read the stored probabilities.
 
 ### Pools (crypto only)
 
