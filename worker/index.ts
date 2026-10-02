@@ -4,6 +4,7 @@ import { approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolv
 import { getProvider } from './payout';
 import { ensureProfile, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
 import { revenueReport } from './revenue';
+import { addEntry, ListError, listEntries, removeEntry, resyncEntries } from './lists';
 import { clearClefFlag, runPatternReview } from './clefBatch';
 import { POINTS } from './clef';
 import { listSweeps, resolveSweep, retrySweep, runSweeps, SweepConflict } from './sweep';
@@ -104,6 +105,19 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 		return json({ user: decodeURIComponent(um[1]!), status: body.status });
 	}
 
+	if (pathname === '/api/admin/lists' && request.method === 'GET') return json({ entries: await listEntries(env, url.searchParams.get('kind') ?? undefined) });
+	if (pathname === '/api/admin/lists' && request.method === 'POST') {
+		const body = (await request.json().catch(() => ({}))) as { kind?: unknown; value?: unknown; note?: unknown };
+		if (typeof body.note !== 'string' || body.note.trim().length < 3) return json({ error: 'note is required (why is it listed?)' }, 400);
+		try { return json(await addEntry(env, String(body.kind), body.value, body.note.trim(), 'admin'), 201); }
+		catch (e) { if (e instanceof ListError) return json({ error: e.message }, 400); throw e; }
+	}
+	if (pathname === '/api/admin/lists/sync' && request.method === 'POST') return json(await resyncEntries(env));
+	const lm = /^\/api\/admin\/lists\/(\d{1,12})$/.exec(pathname);
+	if (lm && request.method === 'DELETE') {
+		const r = await removeEntry(env, Number(lm[1]), 'admin');
+		return r.removed ? json(r) : json({ error: r.sync && !r.sync.synced ? `Could not remove it from Privy: ${r.sync.reason}. Nothing was changed.` : 'Not found' }, r.sync ? 502 : 404);
+	}
 	if (pathname === '/api/admin/revenue' && request.method === 'GET') {
 		const days = Number(url.searchParams.get('days') ?? 30);
 		if (![0, 7, 30, 90, 365].includes(days)) return json({ error: 'days must be 0 (all), 7, 30, 90 or 365' }, 400);

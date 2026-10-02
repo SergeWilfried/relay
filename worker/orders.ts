@@ -1,6 +1,7 @@
 import { normalizeAddress, SELL_ASSETS, toUnits } from './assets';
 import { notify } from './notify';
 import { createDepositWallet } from './depositWallet';
+import { isDenied, kindOfChain } from './lists';
 import { sellQuote } from './pricing';
 import { COUNTED, ensureProfile, evaluate, loadFacts, loadModes, logDecision, RuleDenied, windowStarts, type Outcome } from './rules';
 
@@ -138,6 +139,8 @@ export interface Deposit {
 	isNative: boolean;
 	amountUnits: bigint;
 	txHash?: string;
+	/** where the funds came from, when the webhook says (Privy's payload for this isn't fully documented: see README) */
+	sender?: string;
 }
 
 export type DepositResult = 'no_order' | 'advanced' | 'underpaid' | 'ignored';
@@ -171,12 +174,20 @@ export async function applyDeposit(env: Env, d: Deposit): Promise<{ result: Depo
 	// Confirm the deposit and create the payout in ONE batch (a transaction): an order can't be 'processing' without its payout.
 	// The payout starts as pending_approval: a person releases the money.
 	const q = sellQuote(row.asset, row.amount);
+	// A-01: funds that came FROM a denylisted address: the payout is held until an analyst releases it, and the sweep skips the
+	// order, so tainted funds are not forwarded into the treasury. The deposit itself is still recorded.
+	const senderKey = d.sender ? (asset.chainType === 'ethereum' ? d.sender.toLowerCase() : d.sender) : null; // one canonical form per address (see lists.ts)
+	const tainted = senderKey ? await isDenied(env, kindOfChain(asset.chainType), senderKey) : false;
+	const holdRules = tainted ? JSON.stringify([...new Set([...(row.hold_rules ? (JSON.parse(row.hold_rules) as string[]) : []), 'A-01'])]) : row.hold_rules;
+	const holdMessage = tainted ? 'Your payout is under review. We will update you shortly.' : row.hold_message;
+	const holdUntil = tainted ? null : row.hold_until;
 	const [res] = await env.DB.batch([
-		env.DB.prepare(`UPDATE orders SET status = 'processing', started_at = ?, deposit_tx = ?, deposit_amount_units = ?, note = ?, updated_at = ? WHERE id = ? AND status = 'awaiting_deposit'`)
-			.bind(now, d.txHash ?? null, d.amountUnits.toString(), late ? 'Deposit arrived after the quote expired; converted at the current rate' : null, now, row.id),
+		env.DB.prepare(`UPDATE orders SET status = 'processing', started_at = ?, deposit_tx = ?, deposit_amount_units = ?, note = ?, updated_at = ?, hold_rules = ?, hold_message = ?, hold_until = ? WHERE id = ? AND status = 'awaiting_deposit'`)
+			.bind(now, d.txHash ?? null, d.amountUnits.toString(), late ? 'Deposit arrived after the quote expired; converted at the current rate' : null, now, holdRules, holdMessage, holdUntil, row.id),
 		env.DB.prepare(`INSERT OR IGNORE INTO payouts (id, order_id, user_id, provider, phone, operator, amount_fcfa, gross_fcfa, platform_fee_fcfa, psp_fee_fcfa, status, created_at, updated_at)
 			SELECT 'po' || o.id, o.id, o.user_id, ?, o.phone, o.operator, ?, ?, ?, ?, 'pending_approval', ?, ? FROM orders o WHERE o.id = ? AND o.status = 'processing'`)
 			.bind(env.PAYOUT_PROVIDER, q.payoutFcfa, q.grossFcfa, q.platformFeeFcfa, q.pspFeeFcfa, now, now, row.id),
 	]);
+	if (res!.meta.changes > 0 && tainted) await notify(env, { level: 'critical', title: 'Deposit from a denylisted address: payout held and funds not swept', details: { order: row.id, asset: row.asset, sender: d.sender, tx: d.txHash } });
 	return { result: res!.meta.changes > 0 ? 'advanced' : 'ignored', orderId: row.id };
 }

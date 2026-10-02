@@ -80,8 +80,11 @@ export async function handleEvent(env: Env, event: PrivyEvent, eventId: string):
         isNative: !str(asset.address) && (!type || /native|eth|sol/i.test(type)),
         amountUnits: BigInt(parsed),
         txHash: str(event.transaction_hash),
+        // the sender isn't in Privy's documented payload; accept the likely names and log when none is present, so a silent gap is visible
+        sender: str(event.sender) ?? str(event.from) ?? str(event.source),
       });
       log('info', 'privy.wallet.funds_deposited', { eventId, result: out.result, orderId: out.orderId, tx: str(event.transaction_hash) });
+      if (out.result === 'advanced' && !(str(event.sender) ?? str(event.from) ?? str(event.source))) log('warn', 'deposit.sender_unknown', { eventId, orderId: out.orderId }); // the denylist source check (A-01) could not run
       return;
     }
     case 'transaction.confirmed':

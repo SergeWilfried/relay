@@ -139,7 +139,27 @@ const denyOverCap = (name, token, usd) => ({
   action: 'DENY',
 });
 
-export function buildUserPolicies() {
+/** DENY rules that block transfers to anything in the recipient denylist (a Privy condition set kept in sync by worker/lists.ts). */
+const denyListedEvm = (setId) => [
+  { name: 'Deny ETH sent to a listed recipient', method: 'eth_sendTransaction', action: 'DENY',
+    conditions: [tx('to', 'in_condition_set', setId)] },
+  { name: 'Deny token sent to a listed recipient', method: 'eth_sendTransaction', action: 'DENY',
+    conditions: [{ field_source: 'ethereum_calldata', field: 'transfer.recipient', abi: ERC20_TRANSFER_ABI, operator: 'in_condition_set', value: setId }] },
+];
+const denyListedSol = (setId) => ['signAndSendTransaction', 'signTransaction'].map((method) => ({
+  name: `Deny SOL sent to a listed recipient (${method})`.slice(0, 50), method, action: 'DENY',
+  conditions: [{ field_source: 'solana_system_program_instruction', field: 'Transfer.to', operator: 'in_condition_set', value: setId }],
+}));
+
+/** Names of the two recipient-denylist condition sets (created by scripts/privy-policies.mjs --users). */
+export const DENY_SETS = [
+  { env: 'PRIVY_DENY_SET_EVM', name: 'Relay recipient denylist (EVM)' },
+  { env: 'PRIVY_DENY_SET_SOL', name: 'Relay recipient denylist (Solana)' },
+];
+
+export function buildUserPolicies({ denySets = {} } = {}) {
+  const evmSet = denySets.evm ?? '<recipient-denylist-evm-set-id>';
+  const solSet = denySets.sol ?? '<recipient-denylist-solana-set-id>';
   const tiers = TIER_CAP_USD.flatMap((usd, tier) => [
     {
       env: `PRIVY_POLICY_TIER${tier}_EVM`,
@@ -153,6 +173,7 @@ export function buildUserPolicies() {
           { name: `P-0${3 + tier} ETH transfer cap ${usd} USD`.slice(0, 50), method: 'eth_sendTransaction', action: 'DENY', conditions: [tx('value', 'gt', usdToWei(usd))] },
           denyOverCap(`P-0${3 + tier} USDT transfer cap ${usd} USD`.slice(0, 50), USDT, usd),
           denyOverCap(`P-0${3 + tier} USDC transfer cap ${usd} USD`.slice(0, 50), USDC, usd),
+          ...denyListedEvm(evmSet),
         ],
       },
     },
@@ -169,6 +190,7 @@ export function buildUserPolicies() {
               { field_source: 'solana_system_program_instruction', field: 'Transfer.lamports', operator: 'gt', value: usdToLamports(usd) },
             ],
           })),
+          ...denyListedSol(solSet),
         ],
       },
     },

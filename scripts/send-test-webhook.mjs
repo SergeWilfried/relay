@@ -1,6 +1,6 @@
 // Sends a correctly signed (Svix-style) test event to a running Worker.
 //   node scripts/send-test-webhook.mjs [url] [eventType] [--tamper] [--id=msg_x]
-//   deposit: ... wallet.funds_deposited --to=<addr> --amount=<base units> [--token=<contract>] [--caip2=eip155:1]
+//   deposit: ... wallet.funds_deposited --to=<addr> --amount=<base units> [--token=<contract>] [--caip2=eip155:1] [--from=<sender>]
 // Reads the signing secret from .dev.vars (PRIVY_WEBHOOK_SIGNING_SECRET).
 import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -18,7 +18,7 @@ const payloads = {
   // deposit: --to=<address> --amount=<base units> [--token=<erc20 contract>] [--caip2=eip155:1] [--tx=0x..]
   'wallet.funds_deposited': {
     type, wallet_id: 'w-dep', caip2: flags.caip2 ?? 'eip155:1', recipient: flags.to ?? '0x8f3C4a92eE71B2d5C1f0A6b39C21d4E87a550c21',
-    sender: '0x1111111111111111111111111111111111111111', amount: flags.amount ?? '1000000000000000000',
+    sender: flags.from ?? '0x1111111111111111111111111111111111111111', amount: flags.amount ?? '1000000000000000000',
     asset: flags.token ? { type: 'erc20', address: flags.token } : { type: 'native' },
     transaction_hash: flags.tx ?? `0x${randomUUID().replace(/-/g, '')}`, idempotency_key: randomUUID(),
   },

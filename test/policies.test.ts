@@ -101,3 +101,20 @@ test('with a Solana treasury, every Solana rule pins Transfer.to to it', () => {
   const rules = (buildPolicies({ treasurySol: T }) as { body: { chain_type: string; rules: Rule[] } }[]).find((p) => p.body.chain_type === 'solana')!.body.rules;
   for (const r of rules) assert.ok(r.conditions.some((c) => c.field === 'Transfer.to' && c.value === T), r.name);
 });
+
+test('user policies deny transfers to the recipient denylist through the Privy condition sets', () => {
+  const sets = { evm: 'evmset123456789012345678', sol: 'solset123456789012345678' };
+  const ps = buildUserPolicies({ denySets: sets }) as { env: string; body: { rules: (Rule & { conditions: { operator: string; value: string; field: string }[] })[] } }[];
+  for (const p of ps.filter((x) => x.env.includes('TIER'))) {
+    const evm = p.env.endsWith('_EVM');
+    const listed = p.body.rules.filter((r) => r.name.includes('listed recipient'));
+    assert.equal(listed.length, evm ? 2 : 2, p.env);
+    for (const r of listed) {
+      assert.equal(r.action, 'DENY');
+      assert.equal(r.conditions[0]!.operator, 'in_condition_set');
+      assert.equal(r.conditions[0]!.value, evm ? sets.evm : sets.sol);
+    }
+  }
+  const evmFields = ps.find((p) => p.env === 'PRIVY_POLICY_TIER0_EVM')!.body.rules.filter((r) => r.name.includes('listed recipient')).map((r) => r.conditions[0]!.field).sort();
+  assert.deepEqual(evmFields, ['to', 'transfer.recipient']);
+});

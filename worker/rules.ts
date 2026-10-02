@@ -41,6 +41,8 @@ export const RULES: Rule[] = [
 		when: { user_status: 'restricted' }, action: { type: 'hold' }, user_message: 'Your payout is under review. We will update you shortly.' },
 	{ id: 'R-01', version: 1, mode: 'enforce', phase: 3, description: 'Request from a sanctioned country',
 		when: { country_blocked: true }, action: { type: 'deny', status: 403 }, user_message: 'Service is not available in your country' },
+	{ id: 'R-08', version: 1, mode: 'enforce', phase: 3, description: 'Payout number is on the recipient denylist',
+		when: { payout_number_denied: true }, action: { type: 'deny', status: 403 }, user_message: 'This payout number cannot be used. Please contact support.' },
 	{ id: 'R-02', version: 1, mode: 'enforce', phase: 4, description: 'Below the minimum amount',
 		when: { amount_fcfa: { lt: MIN_FCFA } }, action: { type: 'deny', status: 422 }, user_message: 'Amount is below the minimum' },
 	{ id: 'R-03', version: 2, mode: 'enforce', phase: 4, description: 'Over the per-transaction limit',
@@ -72,6 +74,8 @@ export interface BaseFacts {
 	country_changed: boolean; payout_number_changed: boolean;
 	/** Clef (C-04) flagged a pattern in this user's recent activity and an analyst hasn't cleared it */
 	clef_flag_active: boolean;
+	/** the payout number is on the recipient denylist (worker/lists.ts) */
+	payout_number_denied: boolean;
 	/** earlier requests in the last 7 days between 90% and 100% of the per-transaction limit (this request is added by evaluate) */
 	prior_near_limit_7d: number;
 }
@@ -219,6 +223,8 @@ export async function loadFacts(env: Env, userId: string, input: { amountFcfa: n
 		payout_number_changed: (phones?.total ?? 0) > 0 && (phones?.same ?? 0) === 0,
 		prior_near_limit_7d: near?.n ?? 0,
 		clef_flag_active: profile.clefFlag,
+		// inline (not worker/lists.ts) so this file stays free of imports and testable in plain Node
+		payout_number_denied: !!(await env.DB.prepare(`SELECT 1 AS hit FROM recipient_lists WHERE list = 'deny' AND kind = 'phone' AND value = ?`).bind(input.phone).first()),
 	};
 }
 

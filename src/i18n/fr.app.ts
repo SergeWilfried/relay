@@ -310,6 +310,7 @@ export const app: Record<string, string> = {
   'Your payout is under review, usually under 2 hours.': 'Votre paiement est en cours de vérification, généralement en moins de 2 heures.',
   'For your security, your payout is on hold for 24 hours after a sign-in from a new country.': 'Par sécurité, votre paiement est suspendu 24 heures après une connexion depuis un nouveau pays.',
   'For your security, a payout to a new number is on hold for 48 hours.': 'Par sécurité, un paiement vers un nouveau numéro est suspendu 48 heures.',
+  'This payout number cannot be used. Please contact support.': 'Ce numéro de paiement ne peut pas être utilisé. Veuillez contacter le support.',
   'Service is not available in your country': 'Le service n’est pas disponible dans votre pays',
   'Amount is below the minimum': 'Le montant est inférieur au minimum',
   'Exceeds the per-transaction limit': 'Dépasse le plafond par transaction',

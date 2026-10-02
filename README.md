@@ -160,6 +160,22 @@ Set the printed ids as `PRIVY_DEPOSIT_POLICY_EVM` / `PRIVY_DEPOSIT_POLICY_SOL` (
 **Destination lock:** EVM and Solana are locked to the treasuries in `TREASURY_EVM` / `TREASURY_SOL`. Changing a policy creates a new one in Privy (the old one stays until deleted), so update the policy ids afterwards.
 **Limits of this version:** The Solana rules and the calldata match haven't been run against real Privy; test a sweep on a throwaway order first. There is no sweep job yet; for stronger protection give the wallets an owner (authorization key).
 
+### Recipient lists: allowlists and denylists
+
+What exists for each kind of list, and where it is enforced:
+
+| | Denylist | Allowlist |
+|---|---|---|
+| **Transfer recipients (blockchain)** | Addresses in `recipient_lists`, mirrored to a **Privy condition set**. User-wallet policies (`--users`) DENY ETH, ERC-20 and SOL transfers *to* any listed address (`in_condition_set`), so the list changes without editing a policy | Deposit wallets: the **treasury** is the only allowed destination (Privy policy, fail-closed). Users' own wallets: not possible yet (see below) |
+| **Payout recipients (mobile numbers)** | Rule **R-08** refuses a sell order whose payout number is listed (403, enforced) | Not built: "numbers allowed per tier, in the user's own name" needs the KYC name on the server |
+| **Deposit sources (blockchain)** | Rule **A-01**: a deposit *from* a listed address is recorded but the payout is held (until an analyst releases it) and the **sweep skips it**, so tainted funds aren't forwarded to the treasury; a critical alert fires | none |
+
+Manage the denylist with the admin API (`GET/POST /api/admin/lists`, `DELETE /api/admin/lists/:id`, `POST /api/admin/lists/sync`). Adding needs `{kind: phone|evm|solana, value, note}`; the note (why it's listed) is required. Values are normalised (phone `+digits`, EVM lowercase, Solana as given) so one address has one form. Removal from Privy happens first: if Privy can't be updated the local entry is kept, so the two never disagree about a removal. Run migration 0008.
+**Privy setup:** `node scripts/privy-policies.mjs --users --apply` creates the two condition sets (`PRIVY_DENY_SET_EVM`, `PRIVY_DENY_SET_SOL`) and the user-wallet policies that reference them. Set those ids as Worker secrets; without them entries are enforced by Relay only and reported as `synced: false` (`POST /api/admin/lists/sync` pushes them later). Note: if a Privy condition set is deleted, every condition that references it evaluates to false, so a DENY rule built on it stops firing (fails open): don't delete the sets.
+**Verified against real Privy:** creating the condition sets and the policies that reference them, adding an address (the returned item id is stored) and removing it (the set is empty again). **Not verified:** the **deposit webhook's sender field isn't documented** (the code accepts `sender`, `from` or `source`). If none is present the A-01 check cannot run, and the Worker logs `deposit.sender_unknown` for each deposit; check one real webhook before relying on it.
+**Why no allowlist for users' own wallets:** an allowlist means "deny everything except these", which would also block swaps unless the router and ramp contracts are allowlisted too (P-01). Add those addresses first. A treasury allowlist as a condition set (so you can rotate the treasury without recreating policies, which existing deposit wallets keep) is a sensible next step.
+**Contracts and networks:** the deposit-wallet policies already allowlist the USDT/USDC contracts and pin Ethereum mainnet / Solana; the server's `SELL_ASSETS` is the asset and network allowlist for orders. A contract denylist would use the same condition-set mechanism (not built).
+
 ### Sweeps: forwarding deposits to the treasury (`worker/sweep.ts`)
 
 A cron trigger (every 5 minutes, `wrangler.jsonc` `triggers`) and `POST /api/admin/sweeps/run` queue a sweep for every order whose deposit is confirmed, then send it from the order's Privy deposit wallet to `TREASURY_EVM` / `TREASURY_SOL`. The wallet policies allow exactly that transfer, so even a bug here can't send elsewhere.
