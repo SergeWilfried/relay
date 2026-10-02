@@ -285,6 +285,23 @@ export const app: Record<string, string> = {
   'Withdrawal': 'Retrait',
   'to {provider}': 'vers {provider}',
 
+  // transaction limits
+  'Transaction limits': 'Plafonds de transaction',
+  'After verification': 'Après vérification',
+  'Per transaction': 'Par transaction',
+  '{amount} FCFA max': '{amount} FCFA maximum',
+  'Today': 'Aujourd’hui',
+  'This month': 'Ce mois-ci',
+  'resets at midnight': 'réinitialisé à minuit',
+  'resets on {date}': 'réinitialisé le {date}',
+  '{used} / {limit} FCFA': '{used} / {limit} FCFA',
+  '{amount} FCFA left · {resets}': '{amount} FCFA restants · {resets}',
+  'Verify your identity to start trading. These limits apply once you are verified.': 'Vérifiez votre identité pour commencer à trader. Ces plafonds s’appliquent une fois votre identité vérifiée.',
+  'Maximum per transaction: {amount} FCFA': 'Maximum par transaction : {amount} FCFA',
+  'Daily limit: {amount} FCFA left today': 'Plafond du jour : {amount} FCFA restants aujourd’hui',
+  'Monthly limit: {amount} FCFA left this month': 'Plafond du mois : {amount} FCFA restants ce mois-ci',
+  'Exceeds your limit': 'Dépasse votre plafond',
+
   // messages from the server / provider (shown as received in English if missing)
   'Request failed ({status})': 'Échec de la requête ({status})',
   'Please sign in again to continue.': 'Veuillez vous reconnecter pour continuer.',

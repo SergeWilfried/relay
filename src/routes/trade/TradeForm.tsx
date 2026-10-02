@@ -6,7 +6,7 @@ import { FieldRow } from '../../components/FieldRow';
 import { ProviderGrid } from '../../components/ProviderGrid';
 import { RateTimeline } from '../../components/RateTimeline';
 import { FCFA_COLOR, NETWORK_LOGO, type Asset, type Tab } from '../../lib/data';
-import { fmtCrypto, parseAmount } from '../../lib/format';
+import { fmtCrypto, fmtInt, parseAmount } from '../../lib/format';
 import { useQuote } from '../../lib/api';
 import { useOnline } from '../../lib/net';
 import { shortAddr } from '../../lib/quote';
@@ -15,6 +15,7 @@ import { PhoneSheet, validPhone } from '../../components/PhoneSheet';
 import { useAuth } from '../../auth/AuthContext';
 import { useT } from '../../i18n';
 import { useFcfaAvatar } from '../../lib/geo';
+import { useLimits } from '../../lib/limits';
 import { useTrade } from '../../state/trade';
 
 const isTab = (t?: string): t is Tab => t === 'swap' || t === 'buy' || t === 'sell';
@@ -34,6 +35,7 @@ export default function TradeForm() {
   const auth = useAuth();
   const { t: tl } = useT(); // translator (`t` above is the trade state)
   const fcfaAvatar = useFcfaAvatar();
+  const limits = useLimits();
 
   // the URL is the source of truth for the tab; switching resets the form
   useEffect(() => { if (isTab(param) && param !== t.tab) t.switchTab(param); }, [param]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -55,9 +57,15 @@ export default function TradeForm() {
   // live payouts go to a number the user typed; demo mode falls back to the placeholder number
   const needPhone = tab === 'sell' && auth.mode === 'privy' && t.amountOk && !!t.provider && !(t.phone && validPhone(t.phone));
   const needWallet = tab === 'buy' && !!t.wallet.missing && t.amountOk && !!t.provider;
+  // transaction limits (see lib/limits.ts): checked against the FCFA value of this order
+  const breach = zero ? null : limits.check(q.fcfaGross);
+  const breachText = !breach ? null
+    : breach.kind === 'perTx' ? tl('Maximum per transaction: {amount} FCFA', { amount: fmtInt(breach.max) })
+    : breach.kind === 'daily' ? tl('Daily limit: {amount} FCFA left today', { amount: fmtInt(breach.remaining) })
+    : tl('Monthly limit: {amount} FCFA left this month', { amount: fmtInt(breach.remaining) });
   const reviewLabel = tl(CTA_KEY[tab]);
-  const cta = !online ? tl("You're offline") : failed ? tl('Quote unavailable') : q.insufficient && !zero ? tl('Insufficient balance') : needAmt ? tl('Confirm amount') : needProv ? tl('Choose a provider') : needPhone ? tl('Add your mobile money number') : needWallet ? tl('Add receiving address') : reviewLabel;
-  const disabled = needPhone || needWallet || !online || failed || zero || stale || q.insufficient || needProv;
+  const cta = !online ? tl("You're offline") : failed ? tl('Quote unavailable') : q.insufficient && !zero ? tl('Insufficient balance') : breach ? tl('Exceeds your limit') : needAmt ? tl('Confirm amount') : needProv ? tl('Choose a provider') : needPhone ? tl('Add your mobile money number') : needWallet ? tl('Add receiving address') : reviewLabel;
+  const disabled = !!breach || needPhone || needWallet || !online || failed || zero || stale || q.insufficient || needProv;
 
   const crypto = (a: Asset): { sym: string; net: string; char: string; color: string; logo?: string; badge?: string; onClick?: () => void } => ({ sym: a.sym, net: a.net, char: a.char, color: a.color, logo: a.logo, badge: NETWORK_LOGO[a.net] });
   const fcfa = (net: string) => ({ sym: 'FCFA', net, char: 'F', color: FCFA_COLOR, logo: fcfaAvatar.logo, badge: t.provider?.logo });
@@ -85,8 +93,8 @@ export default function TradeForm() {
       <AmountRow
         label={tab === 'sell' ? tl('You sell') : tl('You pay')}
         chip={fromChip}
-        sub={tab === 'sell' ? fromSub : q.fromSub}
-        subError={q.insufficient}
+        sub={breachText ?? (tab === 'sell' ? fromSub : q.fromSub)}
+        subError={q.insufficient || !!breach}
         value={t.amount} onChange={t.setAmount} decimals={tab !== 'buy'}
       />
       <RateTimeline rate={q.rate} fee={q.fee} />

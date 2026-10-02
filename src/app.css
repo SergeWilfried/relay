@@ -338,3 +338,14 @@ button.chip { cursor: pointer; }
 @media (min-width: 680px) { .addr-short { display: none; } .addr-full { display: inline; } }
 .field > div:first-child { min-width: 0; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- transaction limits ---------- */
+.limit { margin-top: 12px; }
+.limit-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.limit-l { font-weight: 700; font-size: 12.5px; }
+.limit-v { font-size: 12.5px; color: var(--mut); white-space: nowrap; }
+.limit-bar { margin-top: 7px; height: 6px; border-radius: 999px; background: var(--ln); overflow: hidden; }
+.limit-bar i { display: block; height: 100%; border-radius: 999px; background: var(--acc); transition: width .3s; }
+.limit-bar.high i { background: #E8A317; }
+.limit-bar.full i { background: #D14343; }
+.limit-s { margin-top: 5px; font-size: 11.5px; color: var(--mut); }

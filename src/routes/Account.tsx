@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { shortAddr } from '../lib/quote';
 import { LangSwitch } from '../components/LangSwitch';
+import { LimitsSection } from '../components/LimitsSection';
 import { useT } from '../i18n';
 import { useApp } from '../state/app';
 import { useTheme } from '../state/theme';
@@ -54,6 +55,7 @@ export default function Account() {
           </div>
         )}
         <div className="field"><div><div className="field-l">{t('Identity')}</div><div className="field-v" style={{ fontFamily: 'inherit' }}>{kyc === 'verified' ? `✓ ${t('Verified')}` : t('Not verified yet')}</div></div></div>
+        <LimitsSection />
         <div className="sec-label">{t('Appearance')}</div>
         <div className="seg" style={{ width: 'fit-content' }} role="group" aria-label={t('Theme')}>
           <button className={theme === 'light' ? 'on' : ''} onClick={() => setTheme('light')}>{t('Light')}</button>

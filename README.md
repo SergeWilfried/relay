@@ -97,5 +97,12 @@ The app is in **French** (Senegal, Cote d'Ivoire, Burkina Faso) with English kep
 - Not translated: the internal `/admin` page (English), Privy's own sign-in modal opened by "More sign-in options" (Privy only localizes wallet/card screens), and text stored in an order when it was created (an order made in French stays French if you later switch to English).
 - Server messages shown to users are translated on the client by matching the English message (see the last block of `fr.app.ts`).
 
+### Transaction limits
+
+`src/lib/limits.ts` defines the limits (placeholders: 5M FCFA per transaction, 10M per day, 50M per month; set them from your compliance policy).
+The Account card shows them with live usage (calendar day / month on the device, from the user's orders; failed orders and drafts don't count, orders waiting for a deposit reserve their amount),
+and the trade form blocks an order that would exceed them ("Exceeds your limit" with the amount left).
+**This is a UX guard only.** The server does not enforce limits yet (it doesn't store KYC status or all of a user's orders for buys/swaps), so enforce them server-side before relying on them for compliance.
+
 ### Dev failure switches
 `localStorage['relay-mock-quote' | 'relay-mock-submit' | 'relay-mock-order' | 'relay-mock-pools']` — see `src/lib/mock.ts`.
