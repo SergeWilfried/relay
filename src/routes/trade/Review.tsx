@@ -8,6 +8,7 @@ import { mmss, useNow, useOnline } from '../../lib/net';
 import { QUOTE_TTL_MS, submitDraft } from '../../lib/orders';
 import { useAuth } from '../../auth/AuthContext';
 import { createServerOrder } from '../../lib/serverOrders';
+import { useT } from '../../i18n';
 import { useApp } from '../../state/app';
 import { useTrade } from '../../state/trade';
 
@@ -15,6 +16,7 @@ type Phase = 'live' | 'refreshing' | 'error';
 
 export default function Review() {
   const nav = useNavigate();
+  const { t } = useT();
   const { state } = useLocation() as { state: { confirm?: boolean } | null };
   const { draft, requoteDraft, clearDraft } = useTrade();
   const { kyc, addOrder } = useApp();
@@ -78,10 +80,10 @@ export default function Review() {
 
   return (
     <>
-      <BackHeader title="Review order" to={`/trade/${draft.tab}`} />
+      <BackHeader title={t('Review order')} to={`/trade/${draft.tab}`} />
       {moved && (
         <div className="notice warn" role="status">
-          <b>Rate updated.</b> You'll now get {moved.after} instead of {moved.before}. Please review before confirming.
+          <b>{t('Rate updated.')}</b> {t("You'll now get {after} instead of {before}. Please review before confirming.", { after: moved.after, before: moved.before })}
         </div>
       )}
       <div className="tile">
@@ -92,24 +94,24 @@ export default function Review() {
         {q.rows.map(([k, v]) => <div className="kv-r" key={k}><div>{k}</div><div>{v}</div></div>)}
       </div>
 
-      <ActionButton onClick={confirm} busy={busy} busyLabel="Confirming…" disabled={!canConfirm && !busy}>
-        {phase === 'refreshing' ? 'Refreshing quote…' : !online ? "You're offline" : phase === 'error' ? 'Quote expired' : 'Confirm'}
+      <ActionButton onClick={confirm} busy={busy} busyLabel={t('Confirming…')} disabled={!canConfirm && !busy}>
+        {phase === 'refreshing' ? t('Refreshing quote…') : !online ? t("You're offline") : phase === 'error' ? t('Quote expired') : t('Confirm')}
       </ActionButton>
       <ErrorNote>{error}</ErrorNote>
 
       {phase === 'error' && (
         <div className="notice warn" style={{ marginTop: 10 }} role="alert">
-          <b>Couldn't refresh your quote.</b> Nothing has been charged.
-          <div><button className="notice-act" onClick={refresh}>Try again</button></div>
+          <b>{t("Couldn't refresh your quote.")}</b> {t('Nothing has been charged.')}
+          <div><button className="notice-act" onClick={refresh}>{t('Try again')}</button></div>
         </div>
       )}
-      {!online && phase !== 'error' && <div className="note">Reconnect to continue. We'll refresh your quote automatically.</div>}
+      {!online && phase !== 'error' && <div className="note">{t("Reconnect to continue. We'll refresh your quote automatically.")}</div>}
 
       {phase === 'refreshing' ? (
-        <div className="timer" role="status">Getting a fresh quote…</div>
+        <div className="timer" role="status">{t('Getting a fresh quote…')}</div>
       ) : phase === 'live' && online && (
         <div className={`timer${low ? ' low' : ''}`} role="timer" aria-live="off">
-          Quote locked · {mmss(remaining)} · refreshes automatically
+          {t('Quote locked · {time} · refreshes automatically', { time: mmss(remaining) })}
           <div className="bar"><i style={{ width: `${Math.min(100, (remaining / QUOTE_TTL_MS) * 100)}%` }} /></div>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { ASSETS, ETH, type Asset, type Provider, type Tab } from './data';
 import { fmtCrypto, fmtInt, fmtRate } from './format';
+import { tr } from '../i18n';
 
 export const RAIL_FEE = 0.0025;
 export const shortAddr = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
@@ -50,15 +51,15 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
     const rate = `1 ${from.sym} = ${fmtRate(from.fcfa / to.fcfa)} ${to.sym} · ${fmtInt(from.fcfa)} FCFA`;
     return {
       fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtRate(recv),
-      fromSub: `≈ ${fmtInt(round100(gross))} FCFA · Balance ${balText} ${from.sym}`,
-      toSub: `≈ ${fmtInt(round100(gross - fee))} FCFA after fees`,
-      rate, fee: 'Fee: 0.25% fiat rail · Slippage 0.5%',
+      fromSub: `≈ ${fmtInt(round100(gross))} FCFA · ${tr('Balance')} ${balText} ${from.sym}`,
+      toSub: `≈ ${fmtInt(round100(gross - fee))} FCFA ${tr('after fees')}`,
+      rate, fee: tr('Fee: 0.25% fiat rail · Slippage 0.5%'),
       rows: [
-        ['Rate', `1 ${from.sym} = ${fmtRate(from.fcfa / to.fcfa)} ${to.sym}`],
-        ['Network fee', '1,240 FCFA'],
-        ['Fiat rail fee', `0.25% · ${fmtInt(fee)} FCFA`],
-        ['Est. arrival', '~45 seconds'],
-        ['You receive', `${fmtRate(recv)} ${to.sym}`],
+        [tr('Rate'), `1 ${from.sym} = ${fmtRate(from.fcfa / to.fcfa)} ${to.sym}`],
+        [tr('Network fee'), `${fmtInt(1240)} FCFA`],
+        [tr('Fiat rail fee'), `0.25% · ${fmtInt(fee)} FCFA`],
+        [tr('Est. arrival'), tr('~45 seconds')],
+        [tr('You receive'), `${fmtRate(recv)} ${to.sym}`],
       ],
       summaryFrom: `${fmtCrypto(amount, 2, 8)} ${from.sym}`, summaryTo: `${fmtRate(recv)} ${to.sym}`,
       insufficient: bal !== null && amount > bal, fcfaGross: gross, toValue: recv,
@@ -74,16 +75,16 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
     const p = provider;
     return {
       fromAmt: fmtInt(amount), toAmt: fmtCrypto(recv, crypto.dec, crypto.dec),
-      fromSub: p ? `${p.name} ${p.number} · instant` : 'Pay from mobile money',
-      toSub: `≈ ${fmtInt(round100(net))} FCFA after fees`,
-      rate, fee: `Fee: 0.25% · ${fmtInt(fee)} FCFA`,
+      fromSub: p ? `${p.name} ${p.number} · ${tr('instant')}` : tr('Pay from mobile money'),
+      toSub: `≈ ${fmtInt(round100(net))} FCFA ${tr('after fees')}`,
+      rate, fee: `${tr('Fee')}: 0.25% · ${fmtInt(fee)} FCFA`,
       rows: [
-        ['Rate', rate],
-        ['Mobile money fee', `0.25% · ${fmtInt(fee)} FCFA`],
-        ['Network fee', `${fmtInt(netFee)} FCFA`],
-        ['Receiving wallet', shortAddr(wallet)],
-        ['Est. arrival', 'Instant'],
-        ['You receive', `${fmtCrypto(recv, crypto.dec, crypto.dec)} ${crypto.sym}`],
+        [tr('Rate'), rate],
+        [tr('Mobile money fee'), `0.25% · ${fmtInt(fee)} FCFA`],
+        [tr('Network fee'), `${fmtInt(netFee)} FCFA`],
+        [tr('Receiving wallet'), shortAddr(wallet)],
+        [tr('Est. arrival'), tr('Instant')],
+        [tr('You receive'), `${fmtCrypto(recv, crypto.dec, crypto.dec)} ${crypto.sym}`],
       ],
       summaryFrom: `${fmtInt(amount)} FCFA`, summaryTo: `${fmtCrypto(recv, crypto.dec, crypto.dec)} ${crypto.sym}`,
       insufficient: false, fcfaGross: amount, toValue: recv,
@@ -97,15 +98,15 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
   const p = provider;
   return {
     fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtInt(get),
-    fromSub: `Balance ${balText} ${crypto.sym} · Max`,
-    toSub: 'Arrives in 1–2 minutes',
-    rate, fee: `Fee: 0.25% · ${fmtInt(fee)} FCFA`,
+    fromSub: `${tr('Balance')} ${balText} ${crypto.sym} · Max`,
+    toSub: tr('Arrives in 1–2 minutes'),
+    rate, fee: `${tr('Fee')}: 0.25% · ${fmtInt(fee)} FCFA`,
     rows: [
-      ['Rate', rate],
-      ['Fiat rail fee', `0.25% · ${fmtInt(fee)} FCFA`],
-      ['Payout account', p ? `${p.name} ${p.number}` : '—'],
-      ['Est. arrival', '1–2 minutes'],
-      ['You get', `${fmtInt(get)} FCFA`],
+      [tr('Rate'), rate],
+      [tr('Fiat rail fee'), `0.25% · ${fmtInt(fee)} FCFA`],
+      [tr('Payout account'), p ? `${p.name} ${p.number}` : '—'],
+      [tr('Est. arrival'), tr('1–2 minutes')],
+      [tr('You get'), `${fmtInt(get)} FCFA`],
     ],
     summaryFrom: `${fmtCrypto(amount, 2, 8)} ${crypto.sym}`, summaryTo: `${fmtInt(get)} FCFA`,
     insufficient: bal !== null && amount > bal, fcfaGross: gross, toValue: get,

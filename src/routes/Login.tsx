@@ -2,12 +2,15 @@ import { lazy, Suspense } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Splash } from '../auth/Splash';
+import { LangSwitch } from '../components/LangSwitch';
 import { Spinner } from '../components/Spinner';
+import { useT } from '../i18n';
 
 const PrivyLogin = lazy(() => import('../auth/PrivyLogin'));
 
 export default function Login() {
   const { ready, authenticated, mode } = useAuth();
+  const { t } = useT();
   const { state } = useLocation() as { state: { from?: string } | null };
   if (!ready) return <Splash />;
   if (authenticated) return <Navigate to={state?.from && state.from !== '/login' ? state.from : '/trade/swap'} replace />;
@@ -21,7 +24,8 @@ export default function Login() {
           <div className="logo-text" style={{ fontSize: 24 }}>Relay</div>
         </div>
         <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner /></div>}><PrivyLogin /></Suspense>
-        <p className="login-fine">By continuing you agree to the <a href="#terms">User Agreement</a>.</p>
+        <p className="login-fine">{t('By continuing you agree to the')} <a href="#terms">{t('User Agreement')}</a>.</p>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}><LangSwitch /></div>
       </div>
     </div>
   );

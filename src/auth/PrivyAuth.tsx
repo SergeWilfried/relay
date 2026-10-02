@@ -4,6 +4,7 @@ import { useCreateWallet as useCreateSolanaWallet, useSignAndSendTransaction, us
 import { buildSolTransfer, signatureToString } from '../lib/solanaTransfer';
 import { planSend } from '../lib/send';
 import { setTokenGetter } from '../lib/http';
+import { tr } from '../i18n';
 import { useTheme } from '../state/theme';
 import { AuthCtx, type AuthState, type Network } from './AuthContext';
 
@@ -82,16 +83,16 @@ function Bridge({ children }: { children: ReactNode }) {
     canSend: (sym) => (sym === 'SOL' ? !!wallets.Solana : sym === 'ETH' || sym === 'USDT' || sym === 'USDC' ? !!wallets.Ethereum : false),
     sendAsset: async (sym, to, amount) => {
       const plan = planSend(sym, to, amount);
-      if (!plan) throw new Error(`${sym} can't be sent from your Relay wallet. Use the address above from another wallet.`);
+      if (!plan) throw new Error(tr("{sym} can't be sent from your Relay wallet. Use the address above from another wallet.", { sym }));
       if (plan.kind === 'evm') {
-        if (!wallets.Ethereum) throw new Error('Your Ethereum wallet is not ready yet.');
+        if (!wallets.Ethereum) throw new Error(tr('Your Ethereum wallet is not ready yet.'));
         // Privy shows its own confirmation sheet for the embedded wallet before signing
         const { hash } = await sendTransaction({ to: plan.to, value: plan.value, data: plan.data, chainId: plan.chainId }, { address: wallets.Ethereum });
         return hash;
       }
       const from = wallets.Solana;
       const wallet = solWallets.find((w) => w.address === from);
-      if (!from || !wallet) throw new Error('Your Solana wallet is not ready yet.');
+      if (!from || !wallet) throw new Error(tr('Your Solana wallet is not ready yet.'));
       const transaction = await buildSolTransfer(from, plan.to, plan.lamports);
       const { signature } = await signAndSendTransaction({ transaction, wallet, chain: 'solana:mainnet' });
       return signatureToString(signature);

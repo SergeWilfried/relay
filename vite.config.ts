@@ -34,7 +34,8 @@ export default defineConfig({
       manifest: {
         name: 'Relay',
         short_name: 'Relay',
-        description: 'Swap crypto, buy and sell with mobile money, and earn on FCFA liquidity.',
+        description: 'Échangez des cryptos, achetez et vendez avec Mobile Money, et faites fructifier vos FCFA.',
+        lang: 'fr',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

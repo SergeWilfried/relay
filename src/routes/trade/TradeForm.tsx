@@ -13,6 +13,7 @@ import { shortAddr } from '../../lib/quote';
 import { WalletSheet } from '../../components/WalletSheet';
 import { PhoneSheet, validPhone } from '../../components/PhoneSheet';
 import { useAuth } from '../../auth/AuthContext';
+import { useT } from '../../i18n';
 import { useFcfaAvatar } from '../../lib/geo';
 import { useTrade } from '../../state/trade';
 
@@ -21,7 +22,7 @@ const isTab = (t?: string): t is Tab => t === 'swap' || t === 'buy' || t === 'se
 const GAS_RESERVE: Record<string, number> = { ETH: 0.002, SOL: 0.01 };
 const maxSpend = (sym: string, bal: number) => Math.max(0, bal - (GAS_RESERVE[sym] ?? 0));
 
-const CTA: Record<Tab, string> = { swap: 'Review swap', buy: 'Review purchase', sell: 'Review cash out' };
+const CTA_KEY: Record<Tab, string> = { swap: 'Review swap', buy: 'Review purchase', sell: 'Review cash out' };
 
 export default function TradeForm() {
   const { tab: param } = useParams();
@@ -31,6 +32,7 @@ export default function TradeForm() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const auth = useAuth();
+  const { t: tl } = useT(); // translator (`t` above is the trade state)
   const fcfaAvatar = useFcfaAvatar();
 
   // the URL is the source of truth for the tab; switching resets the form
@@ -53,12 +55,13 @@ export default function TradeForm() {
   // live payouts go to a number the user typed; demo mode falls back to the placeholder number
   const needPhone = tab === 'sell' && auth.mode === 'privy' && t.amountOk && !!t.provider && !(t.phone && validPhone(t.phone));
   const needWallet = tab === 'buy' && !!t.wallet.missing && t.amountOk && !!t.provider;
-  const cta = !online ? "You're offline" : failed ? 'Quote unavailable' : q.insufficient && !zero ? 'Insufficient balance' : needAmt ? 'Confirm amount' : needProv ? 'Choose a provider' : needPhone ? 'Add your mobile money number' : needWallet ? 'Add receiving address' : CTA[tab];
+  const reviewLabel = tl(CTA_KEY[tab]);
+  const cta = !online ? tl("You're offline") : failed ? tl('Quote unavailable') : q.insufficient && !zero ? tl('Insufficient balance') : needAmt ? tl('Confirm amount') : needProv ? tl('Choose a provider') : needPhone ? tl('Add your mobile money number') : needWallet ? tl('Add receiving address') : reviewLabel;
   const disabled = needPhone || needWallet || !online || failed || zero || stale || q.insufficient || needProv;
 
   const crypto = (a: Asset): { sym: string; net: string; char: string; color: string; logo?: string; badge?: string; onClick?: () => void } => ({ sym: a.sym, net: a.net, char: a.char, color: a.color, logo: a.logo, badge: NETWORK_LOGO[a.net] });
   const fcfa = (net: string) => ({ sym: 'FCFA', net, char: 'F', color: FCFA_COLOR, logo: fcfaAvatar.logo, badge: t.provider?.logo });
-  const provNet = t.provider?.name ?? 'Mobile money';
+  const provNet = t.provider?.name ?? tl('Mobile money');
 
   const fromChip = tab === 'buy' ? fcfa(provNet) : { ...crypto(t.from), onClick: () => setPicker('from') };
   const toChip = tab === 'sell' ? fcfa(provNet) : { ...crypto(tab === 'swap' ? t.to : t.from), onClick: () => setPicker(tab === 'swap' ? 'to' : 'from') };
@@ -71,16 +74,16 @@ export default function TradeForm() {
   };
 
   const maxBtn = tab !== 'buy' && (
-    <button type="button" disabled={t.balance === null} onClick={() => t.setAmount(String(maxSpend(t.from.sym, t.balance ?? 0)))}>Max</button>
+    <button type="button" disabled={t.balance === null} onClick={() => t.setAmount(String(maxSpend(t.from.sym, t.balance ?? 0)))}>{tl('Max')}</button>
   );
   const fromSub = tab === 'sell'
-    ? <>Balance {t.balance === null ? '—' : fmtCrypto(t.balance, 2, t.from.dec)} {t.from.sym} · {maxBtn}</>
+    ? <>{tl('Balance')} {t.balance === null ? '—' : fmtCrypto(t.balance, 2, t.from.dec)} {t.from.sym} · {maxBtn}</>
     : q.fromSub;
 
   return (
     <>
       <AmountRow
-        label={tab === 'sell' ? 'You sell' : 'You pay'}
+        label={tab === 'sell' ? tl('You sell') : tl('You pay')}
         chip={fromChip}
         sub={tab === 'sell' ? fromSub : q.fromSub}
         subError={q.insufficient}
@@ -88,26 +91,26 @@ export default function TradeForm() {
       />
       <RateTimeline rate={q.rate} fee={q.fee} />
       <AmountRow
-        label={tab === 'sell' ? 'You get' : 'You receive'} chip={toChip} busy={stale && !failed}
+        label={tab === 'sell' ? tl('You get') : tl('You receive')} chip={toChip} busy={stale && !failed}
         display={failed ? '—' : q.toAmt} subError={failed}
-        sub={failed ? <>Couldn't get a quote · <button type="button" onClick={retry}>Retry</button></> : q.toSub}
+        sub={failed ? <>{tl("Couldn't get a quote")} · <button type="button" onClick={retry}>{tl('Retry')}</button></> : q.toSub}
       />
 
       {showPay && t.amountOk && (
-        <ProviderGrid label={tab === 'buy' ? 'Pay with' : 'Cash out to'} selected={t.providerId} onPick={t.setProvider} />
+        <ProviderGrid label={tab === 'buy' ? tl('Pay with') : tl('Cash out to')} selected={t.providerId} onPick={t.setProvider} />
       )}
       {showPay && t.provider && (
         <>
           {tab === 'sell' ? (
-            <FieldRow label="Cash out to mobile money number" value={t.phone ?? (auth.mode === 'privy' ? 'Add your number' : t.provider.number)} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
+            <FieldRow label={tl('Cash out to mobile money number')} value={t.phone ?? (auth.mode === 'privy' ? tl('Add your number') : t.provider.number)} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
           ) : (
-            <FieldRow label="Mobile money number" value={t.provider.number} hint={t.provider.name} />
+            <FieldRow label={tl('Mobile money number')} value={t.provider.number} hint={t.provider.name} />
           )}
-          {tab === 'buy' && <FieldRow label="Receiving wallet" value={t.wallet.missing ? `Add a ${t.from.net} address` : shortAddr(t.wallet.address)} hint={t.wallet.custom ? 'Custom' : t.from.net} onClick={() => setWalletOpen(true)} />}
+          {tab === 'buy' && <FieldRow label={tl('Receiving wallet')} value={t.wallet.missing ? tl('Add a {net} address', { net: t.from.net }) : shortAddr(t.wallet.address)} hint={t.wallet.custom ? tl('Custom') : t.from.net} onClick={() => setWalletOpen(true)} />}
         </>
       )}
 
-      <div className="agree">By clicking “{CTA[tab]}”, you agree to the <a href="#terms">User Agreement</a>.</div>
+      <div className="agree">{tl('By clicking “{action}”, you agree to the', { action: reviewLabel })} <a href="#terms">{tl('User Agreement')}</a>.</div>
       <button className="btn" disabled={disabled && !needAmt} onClick={go}>{cta}</button>
 
       {phoneOpen && t.provider && <PhoneSheet operator={t.provider.name} current={t.phone} onSave={t.setPhone} onClose={() => setPhoneOpen(false)} />}

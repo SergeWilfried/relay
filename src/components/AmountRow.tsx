@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { AssetChip } from './AssetChip';
-import { fmtInt, parseAmount, sanitizeAmount } from '../lib/format';
+import { decimalSep, fmtInt, parseAmount, sanitizeAmount } from '../lib/format';
+import { locale, useT } from '../i18n';
 
 interface Chip { sym: string; net: string; char: string; color: string; logo?: string; badge?: string; onClick?: () => void }
 
@@ -19,9 +20,10 @@ interface Props {
 }
 
 export function AmountRow({ label, chip, sub, subError, display, busy, value, onChange, decimals = true }: Props) {
+  useT(); // re-render (number format) when the language changes
   const [focused, setFocused] = useState(false);
   const editable = value !== undefined && !!onChange;
-  const shown = !editable ? '' : focused ? value : value === '' ? '' : decimals ? tidy(value) : fmtInt(parseAmount(value));
+  const shown = !editable ? '' : focused ? value.replace('.', decimalSep()) : value === '' ? '' : decimals ? tidy(value) : fmtInt(parseAmount(value));
   return (
     <div className={`amt${editable ? ' edit' : ''}`}>
       <div className="amt-main">
@@ -49,5 +51,5 @@ function tidy(v: string) {
   if (!v) return '';
   const [, d = ''] = v.split('.');
   const dec = Math.min(Math.max(2, d.length), 6);
-  return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  return n.toLocaleString(locale(), { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }

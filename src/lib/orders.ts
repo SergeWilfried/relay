@@ -2,6 +2,7 @@ import { type Asset, type Provider, type Tab } from './data';
 import { fmtCrypto, fmtInt } from './format';
 import type { Quote } from './quote';
 import { mockFlag } from './mock';
+import { tr } from '../i18n';
 import { depositTargetFor } from './deposit';
 
 export const QUOTE_TTL_MS = 30_000;
@@ -62,23 +63,23 @@ export function buildOrder(tab: Tab, from: Asset, to: Asset, provider: Provider 
   const gross = fmtInt(Math.round(quote.fcfaGross / 100) * 100);
   if (tab === 'swap') {
     return { ...base,
-      title: 'Routing through the fiat rail…', doneTitle: 'Swap complete', sub: `${from.sym} → FCFA → ${to.sym}`,
-      doneSub: `${quote.summaryTo} delivered · 42s`,
-      steps: [[`Sold ${quote.summaryFrom}`, `${gross} FCFA onto the fiat rail`], ['FCFA settled', 'Instant clearing'], [`Bought ${quote.summaryTo}`, 'Delivered to your wallet']] };
+      title: tr('Routing through the fiat rail…'), doneTitle: tr('Swap complete'), sub: `${from.sym} → FCFA → ${to.sym}`,
+      doneSub: tr('{amount} delivered · 42s', { amount: quote.summaryTo }),
+      steps: [[tr('Sold {amount}', { amount: quote.summaryFrom }), tr('{gross} FCFA onto the fiat rail', { gross })], [tr('FCFA settled'), tr('Instant clearing')], [tr('Bought {amount}', { amount: quote.summaryTo }), tr('Delivered to your wallet')]] };
   }
   const p = provider!;
   const number = opts?.phone ?? p.number; // the number the user entered, else the placeholder (demo)
   if (tab === 'buy') {
     return { ...base,
-      title: 'Processing purchase…', doneTitle: `${from.sym} delivered`, sub: `FCFA → ${from.sym}`,
-      doneSub: `${quote.summaryTo} in your wallet`,
-      steps: [[`${p.name} debited`, `${fmtInt(amount)} FCFA · ${p.number}`], ['FCFA settled', 'Instant clearing'], [`${from.sym} delivered`, `${fmtCrypto(quote.toValue, from.dec, from.dec)} ${from.sym} to ${short(wallet)}`]] };
+      title: tr('Processing purchase…'), doneTitle: tr('{sym} delivered', { sym: from.sym }), sub: `FCFA → ${from.sym}`,
+      doneSub: tr('{amount} in your wallet', { amount: quote.summaryTo }),
+      steps: [[tr('{provider} debited', { provider: p.name }), `${fmtInt(amount)} FCFA · ${p.number}`], [tr('FCFA settled'), tr('Instant clearing')], [tr('{sym} delivered', { sym: from.sym }), tr('{amount} {sym} to {wallet}', { amount: fmtCrypto(quote.toValue, from.dec, from.dec), sym: from.sym, wallet: short(wallet) })]] };
   }
-  const quoteWithNumber = { ...quote, rows: quote.rows.map((r): [string, string] => (r[0] === 'Payout account' ? ['Payout account', `${p.name} ${number}`] : r)) };
+  const quoteWithNumber = { ...quote, rows: quote.rows.map((r): [string, string] => (r[0] === tr('Payout account') ? [tr('Payout account'), `${p.name} ${number}`] : r)) };
   return { ...base, quote: quoteWithNumber,
-    title: 'Cashing out…', doneTitle: 'Cash out sent', sub: `${from.sym} → FCFA`,
-    doneSub: `${quote.summaryTo} on the way to ${p.name}`,
-    steps: [['Deposit received', `${quote.summaryFrom} confirmed on-chain`], ['Sold at market', `${gross} FCFA settled`], [`Sent to ${p.name}`, number]] };
+    title: tr('Cashing out…'), doneTitle: tr('Cash out sent'), sub: `${from.sym} → FCFA`,
+    doneSub: tr('{amount} on the way to {provider}', { amount: quote.summaryTo, provider: p.name }),
+    steps: [[tr('Deposit received'), tr('{amount} confirmed on-chain', { amount: quote.summaryFrom })], [tr('Sold at market'), tr('{gross} FCFA settled', { gross })], [tr('Sent to {provider}', { provider: p.name }), number]] };
 }
 
 /** Turn a locked draft into a live order. Sell orders wait for the on-chain deposit first. */

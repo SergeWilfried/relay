@@ -5,6 +5,7 @@ import { StepList } from '../../components/StepList';
 import { SUPPORT_EMAIL } from '../../lib/data';
 import { useNow, useOnline } from '../../lib/net';
 import { deriveProgress, inFlight } from '../../lib/orders';
+import { tr, useT } from '../../i18n';
 import { useApp } from '../../state/app';
 import { useBalances } from '../../state/balances';
 
@@ -13,6 +14,7 @@ export default function Status() {
   const nav = useNavigate();
   const { orders } = useApp();
   const online = useOnline();
+  const { t } = useT();
   const balances = useBalances();
   const order = orders.find((o) => o.id === id);
   const now = useNow(!!order && inFlight(order, Date.now()), 500);
@@ -28,7 +30,7 @@ export default function Status() {
   // Server-backed sells: show the real payout stages instead of the demo timeline
   const live = order.synced && order.tab === 'sell';
   const steps: [string, string][] = live
-    ? [['Deposit received', `${order.quote.summaryFrom} confirmed on-chain`], ['Payout review', 'Our team checks and approves the payout'], [`Sent to ${order.provider?.name ?? 'mobile money'}`, order.phone ?? '']]
+    ? [[t('Deposit received'), t('{amount} confirmed on-chain', { amount: order.quote.summaryFrom })], [t('Payout review'), t('Our team checks and approves the payout')], [t('Sent to {provider}', { provider: order.provider?.name ?? t('mobile money') }), order.phone ?? '']]
     : order.steps;
   const reviewing = live && phase === 'processing' && step === 1;
   const underpaid = live && order.server?.status === 'underpaid';
@@ -40,21 +42,21 @@ export default function Status() {
   const explorer = order.from.explorer + txHash;
   const txLabel = order.depositTx ? `${order.depositTx.slice(0, 8)}…${order.depositTx.slice(-6)}` : order.hash;
   const refundNote = order.tab === 'sell'
-    ? `Your ${order.from.sym} is safe. If it was received, it will be returned to the sending address within 24 hours.`
+    ? t('Your {sym} is safe. If it was received, it will be returned to the sending address within 24 hours.', { sym: order.from.sym })
     : order.tab === 'buy'
-      ? 'If you were debited, the money will be returned to your mobile money account within 24 hours.'
-      : `Your ${order.from.sym} is safe. Anything already converted is reversed automatically within 24 hours.`;
+      ? t('If you were debited, the money will be returned to your mobile money account within 24 hours.')
+      : t('Your {sym} is safe. Anything already converted is reversed automatically within 24 hours.', { sym: order.from.sym });
 
   return (
     <>
       {!online && !done && !failed && (
-        <div className="notice warn" role="status">You're offline. Your order keeps processing — we'll update this screen when you're back.</div>
+        <div className="notice warn" role="status">{t("You're offline. Your order keeps processing — we'll update this screen when you're back.")}</div>
       )}
       <div className="status-top" aria-live="polite">
         {done ? <div className="check">✓</div> : failed ? <div className="check bad">✕</div> : <Spinner large />}
-        <div className="status-t">{done ? order.doneTitle : failed ? (live ? 'Payout needs attention' : "This didn't go through") : reviewing ? 'Payout under review' : order.title}</div>
+        <div className="status-t">{done ? order.doneTitle : failed ? (live ? t('Payout needs attention') : t("This didn't go through")) : reviewing ? t('Payout under review') : order.title}</div>
         <div className="status-s">
-          {done ? order.doneSub : failed ? `Step ${step + 1} of 3 didn't complete · ${order.quote.summaryFrom}` : reviewing ? `${order.quote.summaryTo} to ${order.provider?.name}` : order.sub}
+          {done ? order.doneSub : failed ? t("Step {n} of 3 didn't complete · {amount}", { n: step + 1, amount: order.quote.summaryFrom }) : reviewing ? t('{amount} to {provider}', { amount: order.quote.summaryTo, provider: order.provider?.name ?? '' }) : order.sub}
         </div>
       </div>
 
@@ -62,33 +64,33 @@ export default function Status() {
 
       {reviewing && (
         <div className="notice" role="status">
-          <b>Your payout is being reviewed.</b> We've received your {order.from.sym}. Your FCFA will be sent to {order.provider?.name} {order.phone} as soon as it's approved. You can leave this page.
-          <div><Link to="/activity" className="notice-act">Go to Activity</Link></div>
+          <b>{t('Your payout is being reviewed.')}</b> {t("We've received your {sym}. Your FCFA will be sent to {provider} {phone} as soon as it's approved. You can leave this page.", { sym: order.from.sym, provider: order.provider?.name ?? '', phone: order.phone ?? '' })}
+          <div><Link to="/activity" className="notice-act">{t('Go to Activity')}</Link></div>
         </div>
       )}
       {stalled && (
         <div className="notice" role="status">
-          <b>Taking longer than usual.</b> You can leave this page — we'll keep processing and it will show in Activity.
-          <div><Link to="/activity" className="notice-act">Go to Activity</Link></div>
+          <b>{t('Taking longer than usual.')}</b> {t("You can leave this page — we'll keep processing and it will show in Activity.")}
+          <div><Link to="/activity" className="notice-act">{t('Go to Activity')}</Link></div>
         </div>
       )}
       {failed && (
         <div className="notice warn" role="alert">
           {live
             ? underpaid
-              ? <><b>Your deposit doesn't match the order.</b> {order.server?.note} Contact support with order {order.id}: we'll fix or refund it.</>
-              : <><b>We couldn't complete your payout.</b> {order.server?.payoutError ? `${order.server.payoutError}. ` : ''}We have your {order.from.sym}: contact support with order {order.id} and we'll retry or refund it.</>
+              ? <><b>{t("Your deposit doesn't match the order.")}</b> {order.server?.note ? tr(order.server.note) : ''} {t("Contact support with order {id}: we'll fix or refund it.", { id: order.id })}</>
+              : <><b>{t("We couldn't complete your payout.")}</b> {order.server?.payoutError ? `${tr(order.server.payoutError)}. ` : ''}{t("We have your {sym}: contact support with order {id} and we'll retry or refund it.", { sym: order.from.sym, id: order.id })}</>
             : refundNote}
         </div>
       )}
 
-      <div className="hash">{txLabel} · <a href={explorer} target="_blank" rel="noreferrer">view on explorer</a></div>
+      <div className="hash">{txLabel} · <a href={explorer} target="_blank" rel="noreferrer">{t('view on explorer')}</a></div>
 
-      {done && <button className="btn sec" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>Start another</button>}
+      {done && <button className="btn sec" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>{t('Start another')}</button>}
       {failed && (
         <div className="status-actions">
-          {!live && <button className="btn" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>Try again</button>}
-          <a className={live ? 'btn' : 'btn sec'} style={{ textDecoration: 'none' }} href={`mailto:${SUPPORT_EMAIL}?subject=Relay order ${order.id}`}>Contact support</a>
+          {!live && <button className="btn" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>{t('Try again')}</button>}
+          <a className={live ? 'btn' : 'btn sec'} style={{ textDecoration: 'none' }} href={`mailto:${SUPPORT_EMAIL}?subject=Relay ${order.id}`}>{t('Contact support')}</a>
         </div>
       )}
     </>

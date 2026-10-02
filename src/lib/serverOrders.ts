@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import { apiFetch } from './http';
 import type { Order } from './orders';
 
@@ -26,7 +27,9 @@ export interface ServerOrder {
 const plain = (n: number) => n.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 
 async function readError(res: Response): Promise<string> {
-  try { return ((await res.json()) as { error?: string }).error ?? `Request failed (${res.status})`; } catch { return `Request failed (${res.status})`; }
+  // the server replies in English; known messages are translated, anything else is shown as received
+  const fallback = tr('Request failed ({status})', { status: res.status });
+  try { const e = ((await res.json()) as { error?: string }).error; return e ? tr(e) : fallback; } catch { return fallback; }
 }
 
 /** Registers a sell order and returns its deposit address. Idempotent per order id, so a retry is safe. */
@@ -35,7 +38,7 @@ export async function createServerOrder(o: Order): Promise<ServerOrder> {
     method: 'POST',
     body: JSON.stringify({ id: o.id, asset: o.from.sym, amount: plain(o.amount), providerId: o.provider?.id, phone: o.phone }),
   });
-  if (!res.ok) throw new Error(res.status === 401 ? 'Please sign in again to continue.' : await readError(res));
+  if (!res.ok) throw new Error(res.status === 401 ? tr('Please sign in again to continue.') : await readError(res));
   return (await res.json()) as ServerOrder;
 }
 

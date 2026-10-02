@@ -7,10 +7,11 @@ import { InstallBanner } from '../components/InstallBanner';
 import { useInstall } from '../lib/pwa';
 import { useNow, useOnline } from '../lib/net';
 import { useOrderSync } from '../lib/useOrderSync';
+import { useT } from '../i18n';
 import { deriveProgress, inFlight } from '../lib/orders';
 
 const Logo = () => (
-  <Link to="/trade/swap" className="logo" aria-label="Relay home">
+  <Link to="/trade/swap" className="logo" aria-label="Relay">
     <div className="logo-mark">R</div><div className="logo-text">Relay</div>
   </Link>
 );
@@ -18,6 +19,7 @@ const Logo = () => (
 export function AppShell() {
   const { kyc, orders } = useApp();
   const auth = useAuth();
+  const { t } = useT();
   const ethAddr = auth.wallets.Ethereum ?? auth.wallets.Solana ?? null;
   const online = useOnline();
   useOrderSync();
@@ -34,28 +36,28 @@ export function AppShell() {
     <div className="app">
       {/* mobile header */}
       <header className="hd">
-        <Link to="/account" className="hd-btn" aria-label="Menu"><MenuGrid /></Link>
+        <Link to="/account" className="hd-btn" aria-label={t('Menu')}><MenuGrid /></Link>
         <Logo />
-        <Link to="/account" className="avatar" aria-label="Account">{initials(auth.email)}{verified && <span className="avatar-badge">✓</span>}</Link>
+        <Link to="/account" className="avatar" aria-label={t('Account')}>{initials(auth.email)}{verified && <span className="avatar-badge">✓</span>}</Link>
       </header>
 
       {/* desktop top bar */}
       <header className="topbar">
         <div className="topbar-l">
           <Logo />
-          <nav className="nav" aria-label="Primary">
-            <NavLink to="/trade/swap" className={() => (pathname.startsWith('/trade') ? 'active' : '')}>Trade</NavLink>
-            <NavLink to="/pool" className={cls}>Pool</NavLink>
-            <NavLink to="/activity" className={cls}>Activity</NavLink>
+          <nav className="nav" aria-label={t('Main navigation')}>
+            <NavLink to="/trade/swap" className={() => (pathname.startsWith('/trade') ? 'active' : '')}>{t('Trade')}</NavLink>
+            <NavLink to="/pool" className={cls}>{t('Pool')}</NavLink>
+            <NavLink to="/activity" className={cls}>{t('Activity')}</NavLink>
           </nav>
         </div>
         <div className="topbar-r">
-          <div className="seg" role="group" aria-label="Theme">
-            <button className={theme === 'light' ? 'on' : ''} onClick={() => setTheme('light')}>Light</button>
-            <button className={theme === 'dark' ? 'on' : ''} onClick={() => setTheme('dark')}>Dark</button>
+          <div className="seg" role="group" aria-label={t('Theme')}>
+            <button className={theme === 'light' ? 'on' : ''} onClick={() => setTheme('light')}>{t('Light')}</button>
+            <button className={theme === 'dark' ? 'on' : ''} onClick={() => setTheme('dark')}>{t('Dark')}</button>
           </div>
           <span className="pill net"><i className="dot" />Ethereum</span>
-          {verified && <span className="pill acc">✓ Verified</span>}
+          {verified && <span className="pill acc">✓ {t('Verified')}</span>}
           {ethAddr && (
             <Link to="/account" className="pill mono" style={{ textDecoration: 'none' }}>
               {ethAddr.slice(0, 5)}…{ethAddr.slice(-3)}{auth.mode === 'demo' ? ' · 2.84 ETH' : ''}
@@ -67,21 +69,21 @@ export function AppShell() {
 
       <main className="scroll">
         {/* stay out of the way mid-transaction */}
-        {!online && <div className="banner offline" role="status">You're offline. Quotes and new orders are paused until you reconnect.</div>}
+        {!online && <div className="banner offline" role="status">{t("You're offline. Quotes and new orders are paused until you reconnect.")}</div>}
         {active && !/^\/trade\/(deposit|status)/.test(pathname) && (
           <Link className="banner live" to={deriveProgress(active, now).phase === 'awaiting_deposit' ? `/trade/deposit/${active.id}` : `/trade/status/${active.id}`}>
-            <span>{deriveProgress(active, now).phase === 'awaiting_deposit' ? 'Waiting for your deposit' : 'Transaction in progress'} · {active.quote.summaryFrom} → {active.quote.summaryTo}</span><span aria-hidden>›</span>
+            <span>{deriveProgress(active, now).phase === 'awaiting_deposit' ? t('Waiting for your deposit') : t('Transaction in progress')} · {active.quote.summaryFrom} → {active.quote.summaryTo}</span><span aria-hidden>›</span>
           </Link>
         )}
         {!/^\/trade\/(review|verify|deposit|status)/.test(pathname) && <InstallBanner {...install} />}
         <Outlet />
       </main>
 
-      <nav className="tabbar" aria-label="Primary">
-        <NavLink to="/trade/swap" className={() => (pathname.startsWith('/trade') ? 'active' : '')}><span className="bar" /><TradeIcon />Trade</NavLink>
-        <NavLink to="/pool" className={cls}><span className="bar" /><PoolIcon />Pool</NavLink>
-        <NavLink to="/activity" className={cls}><span className="bar" /><ActivityIcon />Activity</NavLink>
-        <NavLink to="/account" className={cls}><span className="bar" /><AccountIcon />Account</NavLink>
+      <nav className="tabbar" aria-label={t('Main navigation')}>
+        <NavLink to="/trade/swap" className={() => (pathname.startsWith('/trade') ? 'active' : '')}><span className="bar" /><TradeIcon />{t('Trade')}</NavLink>
+        <NavLink to="/pool" className={cls}><span className="bar" /><PoolIcon />{t('Pool')}</NavLink>
+        <NavLink to="/activity" className={cls}><span className="bar" /><ActivityIcon />{t('Activity')}</NavLink>
+        <NavLink to="/account" className={cls}><span className="bar" /><AccountIcon />{t('Account')}</NavLink>
       </nav>
     </div>
   );

@@ -4,6 +4,7 @@ import { parseAmount } from './format';
 import { mockFlag } from './mock';
 import { getQuote, type Quote } from './quote';
 import { useDebounced } from './useDebounced';
+import { tr, useT } from '../i18n';
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -21,7 +22,7 @@ export async function fetchQuote(p: QuoteParams, amount: number, opts: { refresh
 /** Order / pool submission stand-in. Rejects with a user-facing message. */
 export async function submitApi(): Promise<void> {
   await delay(700);
-  if (mockFlag('submit') === 'error') throw new Error("We couldn't submit that. Nothing was charged — please try again.");
+  if (mockFlag('submit') === 'error') throw new Error(tr("We couldn't submit that. Nothing was charged — please try again."));
 }
 
 export type QuoteStatus = 'loading' | 'ready' | 'error';
@@ -31,12 +32,13 @@ export type QuoteStatus = 'loading' | 'ready' | 'error';
  * While a request is in flight (or after a failure) it keeps showing the local estimate rather than blanking.
  */
 export function useQuote(p: QuoteParams, rawAmount: string) {
+  const { lang } = useT(); // quote strings are generated in the active language
   const debounced = useDebounced(rawAmount, 250);
   const [nonce, setNonce] = useState(0);
-  const key = `${p.tab}|${p.from.sym}|${p.to.sym}|${p.provider?.id ?? ''}|${p.wallet}|${p.balance ?? 'x'}|${debounced}|${nonce}`;
+  const key = `${p.tab}|${p.from.sym}|${p.to.sym}|${p.provider?.id ?? ''}|${p.wallet}|${p.balance ?? 'x'}|${debounced}|${nonce}|${lang}`;
   const local = useMemo(() => getQuote({ tab: p.tab, amount: parseAmount(debounced), from: p.from, to: p.to, balance: p.balance }, p.provider, p.wallet),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [p.tab, p.from, p.to, p.provider, p.wallet, p.balance, debounced]);
+    [p.tab, p.from, p.to, p.provider, p.wallet, p.balance, debounced, lang]);
   const [res, setRes] = useState<{ key: string; quote: Quote | null }>({ key: '', quote: null });
   const latest = useRef(key);
   latest.current = key;
@@ -70,7 +72,7 @@ export function useSubmit() {
     if (running.current) return;
     running.current = true;
     setBusy(true); setError(null);
-    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.'); }
+    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : tr('Something went wrong. Please try again.')); }
     finally { running.current = false; setBusy(false); }
   }, []);
   return { run, busy, error, clearError: () => setError(null) };

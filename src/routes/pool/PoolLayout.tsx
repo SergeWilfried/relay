@@ -1,15 +1,17 @@
 import { Outlet } from 'react-router-dom';
 import { totalTvlMillions } from '../../lib/data';
 import { lenStep } from '../../lib/format';
+import { useT } from '../../i18n';
 
 export const PoolLayout = () => <div className="page pool"><Outlet /></div>;
 
 function Stat({ label, value, unit, acc }: { label: string; value: string; unit: string; acc?: boolean }) {
+  const { t } = useT();
   return (
     <div className="stat">
-      <div className="stat-l">{label}</div>
+      <div className="stat-l">{t(label)}</div>
       <div className={`stat-v${acc ? ' acc' : ''}`} data-len={lenStep(value, 5, 7)}>{value}</div>
-      <div className="stat-u">{unit}</div>
+      <div className="stat-u">{t(unit)}</div>
     </div>
   );
 }

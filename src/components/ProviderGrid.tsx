@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { PROVIDERS } from '../lib/data';
+import { useT } from '../i18n';
 import { ProviderIcon } from './ProviderIcon';
 
 export function ProviderGrid({ label, selected, onPick }: { label: string; selected: string | null; onPick: (id: string) => void }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const cur = PROVIDERS.find((p) => p.id === selected);
   // once chosen, collapse to a single row; tap to change
@@ -13,7 +15,7 @@ export function ProviderGrid({ label, selected, onPick }: { label: string; selec
         <button type="button" className="prov on" style={{ width: '100%' }} aria-expanded={false} onClick={() => setOpen(true)}>
           <ProviderIcon p={cur} />
           <div className="prov-name">{cur.name}</div>
-          <div className="prov-mark" style={{ color: 'var(--mut)' }}>Change ›</div>
+          <div className="prov-mark" style={{ color: 'var(--mut)' }}>{t('Change')} ›</div>
         </button>
       </div>
     );

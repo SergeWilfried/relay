@@ -1,4 +1,5 @@
 import { AssetIcon } from './AssetIcon';
+import { useT } from '../i18n';
 import { Chevron } from './Icons';
 
 interface Props { sym: string; net: string; char: string; color: string; logo?: string; /** small network / provider logo shown on the avatar corner (phones) */ badge?: string; /** force the compact pill at every width (used in the picker) */ compact?: boolean; onClick?: () => void }
@@ -8,6 +9,7 @@ interface Props { sym: string; net: string; char: string; color: string; logo?: 
  * Phones (see `.chip` rules in app.css): compact pill, avatar with a network badge in its corner, symbol only.
  */
 export function AssetChip({ sym, net, char, color, logo, badge, compact, onClick }: Props) {
+  const { t } = useT();
   const inner = (
     <>
       <span className="chip-av">
@@ -19,6 +21,6 @@ export function AssetChip({ sym, net, char, color, logo, badge, compact, onClick
     </>
   );
   return onClick
-    ? <button type="button" className={`chip${compact ? ' compact' : ''}`} onClick={onClick} aria-label={`Choose asset, ${sym} on ${net}`}>{inner}</button>
-    : <div className={`chip${compact ? ' compact' : ''}`} aria-label={`${sym} on ${net}`}>{inner}</div>;
+    ? <button type="button" className={`chip${compact ? ' compact' : ''}`} onClick={onClick} aria-label={t('Choose asset, {sym} on {net}', { sym, net })}>{inner}</button>
+    : <div className={`chip${compact ? ' compact' : ''}`} aria-label={t('{sym} on {net}', { sym, net })}>{inner}</div>;
 }
