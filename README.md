@@ -80,5 +80,13 @@ Provider status callbacks arrive at `POST /api/webhooks/payout` (set `PAYOUT_WEB
 
 The app asks for the user's own mobile money number on Sell (live mode never pre-fills the placeholder numbers).
 
+### Country flag as the FCFA avatar
+
+`GET /api/geo` returns the visitor's country from Cloudflare's IP geolocation (`request.cf.country`, no third-party service, no IP stored).
+For Senegal, Cote d'Ivoire and Burkina Faso the FCFA icon (trade chip, FCFA pool) becomes that country's flag; anywhere else it stays the green "F".
+The answer is cached on the device for 24h. It is **cosmetic only**: a VPN or roaming changes it, so never use it for KYC, limits or payouts.
+Flags live in `design-assets/country/` (originals) and `public/country/` (square 96px, `pnpm flags`). To add a country: add its flag to `scripts/flags.mjs` and an entry to `SERVED` in `src/lib/geo.ts`.
+Locally Wrangler fills in `request.cf` from your real IP; to pretend: `localStorage['relay-mock-country'] = 'SN'` (dev only).
+
 ### Dev failure switches
 `localStorage['relay-mock-quote' | 'relay-mock-submit' | 'relay-mock-order' | 'relay-mock-pools']` — see `src/lib/mock.ts`.
