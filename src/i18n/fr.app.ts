@@ -205,7 +205,7 @@ export const app: Record<string, string> = {
   'Processing': 'En cours',
 
   // pools
-  'Total liquidity': 'Liquidité totale',
+  'Total liquidity': 'Liquidité',
   '24h volume': 'Volume 24 h',
   'Avg APY': 'APY moyen',
   'paid in FCFA': 'versé en FCFA',
