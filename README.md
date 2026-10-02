@@ -54,5 +54,31 @@ Local end-to-end (no real Privy needed): `node scripts/mint-token.mjs did:privy:
 `node scripts/send-test-webhook.mjs http://localhost:5173/api/webhooks/privy wallet.funds_deposited --to=<depositAddress> --amount=<base units>`.
 (`.dev.vars` must hold the matching `.test-pub.pem` as `PRIVY_VERIFICATION_KEY` for these local tokens to verify.)
 
+### Mobile money payouts (manual approval)
+
+After a deposit is confirmed the server creates a payout in `pending_approval`; **a person releases it**. The FCFA amount is computed
+on the server (`worker/pricing.ts`, placeholder rates: replace with a real rate feed), never taken from the client.
+
+Lifecycle: `pending_approval` -> `approved` -> `sending` -> `paid` | `failed`; `pending_approval` -> `rejected`.
+- Every transition is a conditional update, so double clicks / retries can't double-pay; the provider receives the payout id as its idempotency reference.
+- If the provider call errors (outcome unknown) the payout stays `sending` with an `UNKNOWN OUTCOME` note. It is never retried automatically:
+  check the provider's dashboard, then `resolve` it as paid or failed. Only a definitively `failed` payout can be `retry`-ed.
+
+Release payouts (needs `ADMIN_API_KEY`, 16+ chars, as a secret):
+```bash
+node scripts/admin-payouts.mjs list pending_approval
+node scripts/admin-payouts.mjs approve <payoutId>
+node scripts/admin-payouts.mjs reject <payoutId> "reason"
+node scripts/admin-payouts.mjs retry <payoutId>
+node scripts/admin-payouts.mjs resolve <payoutId> paid|failed "note"
+# production: ADMIN_API_KEY=... API_URL=https://your-domain node scripts/admin-payouts.mjs ...
+```
+Provider: `PAYOUT_PROVIDER` (default `sandbox`, which moves no money; behaviour by the last digits of the phone: `0000` fails,
+`9999` settles later by webhook, `5555` simulates an unknown outcome). The sandbox refuses to run with `LIVE=true`.
+To go live add an adapter in `worker/payout/` implementing `PayoutProvider` (`send`, `parseWebhook`) and register it in `worker/payout/index.ts`.
+Provider status callbacks arrive at `POST /api/webhooks/payout` (set `PAYOUT_WEBHOOK_SECRET`). Apply migrations with `pnpm db:migrate:local` / `pnpm db:migrate`.
+
+The app asks for the user's own mobile money number on Sell (live mode never pre-fills the placeholder numbers).
+
 ### Dev failure switches
 `localStorage['relay-mock-quote' | 'relay-mock-submit' | 'relay-mock-order' | 'relay-mock-pools']` — see `src/lib/mock.ts`.

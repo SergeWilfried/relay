@@ -6,6 +6,7 @@ import { initials, useAuth } from '../auth/AuthContext';
 import { InstallBanner } from '../components/InstallBanner';
 import { useInstall } from '../lib/pwa';
 import { useNow, useOnline } from '../lib/net';
+import { useOrderSync } from '../lib/useOrderSync';
 import { deriveProgress, inFlight } from '../lib/orders';
 
 const Logo = () => (
@@ -19,6 +20,7 @@ export function AppShell() {
   const auth = useAuth();
   const ethAddr = auth.wallets.Ethereum ?? auth.wallets.Solana ?? null;
   const online = useOnline();
+  useOrderSync();
   const live = orders.filter((o) => inFlight(o, Date.now()));
   const now = useNow(live.length > 0);
   const active = orders.find((o) => inFlight(o, now));

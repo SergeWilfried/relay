@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PROVIDERS } from '../lib/data';
+import { ProviderIcon } from './ProviderIcon';
 
 export function ProviderGrid({ label, selected, onPick }: { label: string; selected: string | null; onPick: (id: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -10,7 +11,7 @@ export function ProviderGrid({ label, selected, onPick }: { label: string; selec
       <div>
         <div className="sec-label">{label}</div>
         <button type="button" className="prov on" style={{ width: '100%' }} aria-expanded={false} onClick={() => setOpen(true)}>
-          <div className="prov-dot" style={{ background: cur.color, color: cur.fg }}>{cur.char}</div>
+          <ProviderIcon p={cur} />
           <div className="prov-name">{cur.name}</div>
           <div className="prov-mark" style={{ color: 'var(--mut)' }}>Change ›</div>
         </button>
@@ -25,7 +26,7 @@ export function ProviderGrid({ label, selected, onPick }: { label: string; selec
           const on = selected === p.id;
           return (
             <button key={p.id} type="button" role="radio" aria-checked={on} className={`prov${on ? ' on' : ''}`} onClick={() => { onPick(p.id); setOpen(false); }}>
-              <div className="prov-dot" style={{ background: p.color, color: p.fg }}>{p.char}</div>
+              <ProviderIcon p={p} />
               <div className="prov-name">{p.name}</div>
               <div className="prov-mark">{on ? '✓' : ''}</div>
             </button>

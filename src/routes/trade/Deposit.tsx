@@ -5,7 +5,7 @@ import { ActionButton, ErrorNote } from '../../components/ActionButton';
 import { BackHeader } from '../../components/BackHeader';
 import { Spinner } from '../../components/Spinner';
 import { submitApi, useSubmit } from '../../lib/api';
-import { fetchServerOrder } from '../../lib/serverOrders';
+import { fetchServerOrder, patchFromServer } from '../../lib/serverOrders';
 import { mmss, useNow } from '../../lib/net';
 import { fmtCrypto } from '../../lib/format';
 import { useAuth } from '../../auth/AuthContext';
@@ -38,8 +38,9 @@ export default function Deposit() {
     try {
       const s = await fetchServerOrder(order.id);
       if (!s) return;
-      if (s.status === 'processing') updateOrder(order.id, { awaitingDeposit: false, startedAt: s.startedAt ?? Date.now(), depositTx: s.depositTx ?? order.depositTx });
-      else if (s.status === 'underpaid') setServerNote(s.note ?? "We received a deposit that doesn't match your order.");
+      const patch = patchFromServer(order, s);
+      if (patch) updateOrder(order.id, patch);
+      if (s.status === 'underpaid') setServerNote(s.note ?? "We received a deposit that doesn't match your order.");
     } catch { /* offline or transient: the next poll retries */ } finally { setChecking(false); }
   }, [order, updateOrder]);
   useEffect(() => {

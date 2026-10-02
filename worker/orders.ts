@@ -44,7 +44,7 @@ const AMOUNT = /^\d{1,12}(\.\d{1,18})?$/;
 
 export interface CreateOrderInput { id: unknown; asset: unknown; amount: unknown; providerId?: unknown; phone?: unknown }
 
-const OPERATORS = new Set(['orange', 'wave', 'mtn', 'moov']);
+const OPERATORS = new Set(['orange', 'wave', 'pispi', 'moov']);
 const PHONE = /^\+\d{8,15}$/;
 
 /** Idempotent per (user, id): retrying the same request returns the same order and deposit address. */

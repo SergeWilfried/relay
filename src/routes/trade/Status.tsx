@@ -25,6 +25,13 @@ export default function Status() {
   const { phase, step } = deriveProgress(order, now);
   if (phase === 'awaiting_deposit') return <Navigate to={`/trade/deposit/${order.id}`} replace />;
 
+  // Server-backed sells: show the real payout stages instead of the demo timeline
+  const live = order.synced && order.tab === 'sell';
+  const steps: [string, string][] = live
+    ? [['Deposit received', `${order.quote.summaryFrom} confirmed on-chain`], ['Payout review', 'Our team checks and approves the payout'], [`Sent to ${order.provider?.name ?? 'mobile money'}`, order.phone ?? '']]
+    : order.steps;
+  const reviewing = live && phase === 'processing' && step === 1;
+  const underpaid = live && order.server?.status === 'underpaid';
   const done = phase === 'done';
   const failed = phase === 'failed';
   const stalled = phase === 'stalled';
@@ -45,29 +52,43 @@ export default function Status() {
       )}
       <div className="status-top" aria-live="polite">
         {done ? <div className="check">✓</div> : failed ? <div className="check bad">✕</div> : <Spinner large />}
-        <div className="status-t">{done ? order.doneTitle : failed ? "This didn't go through" : order.title}</div>
+        <div className="status-t">{done ? order.doneTitle : failed ? (live ? 'Payout needs attention' : "This didn't go through") : reviewing ? 'Payout under review' : order.title}</div>
         <div className="status-s">
-          {done ? order.doneSub : failed ? `Step ${step + 1} of 3 didn't complete · ${order.quote.summaryFrom}` : order.sub}
+          {done ? order.doneSub : failed ? `Step ${step + 1} of 3 didn't complete · ${order.quote.summaryFrom}` : reviewing ? `${order.quote.summaryTo} to ${order.provider?.name}` : order.sub}
         </div>
       </div>
 
-      <StepList steps={order.steps} step={step} done={done} failedAt={failed ? step : undefined} />
+      <StepList steps={steps} step={step} done={done} failedAt={failed ? step : undefined} />
 
+      {reviewing && (
+        <div className="notice" role="status">
+          <b>Your payout is being reviewed.</b> We've received your {order.from.sym}. Your FCFA will be sent to {order.provider?.name} {order.phone} as soon as it's approved. You can leave this page.
+          <div><Link to="/activity" className="notice-act">Go to Activity</Link></div>
+        </div>
+      )}
       {stalled && (
         <div className="notice" role="status">
           <b>Taking longer than usual.</b> You can leave this page — we'll keep processing and it will show in Activity.
           <div><Link to="/activity" className="notice-act">Go to Activity</Link></div>
         </div>
       )}
-      {failed && <div className="notice warn" role="alert">{refundNote}</div>}
+      {failed && (
+        <div className="notice warn" role="alert">
+          {live
+            ? underpaid
+              ? <><b>Your deposit doesn't match the order.</b> {order.server?.note} Contact support with order {order.id}: we'll fix or refund it.</>
+              : <><b>We couldn't complete your payout.</b> {order.server?.payoutError ? `${order.server.payoutError}. ` : ''}We have your {order.from.sym}: contact support with order {order.id} and we'll retry or refund it.</>
+            : refundNote}
+        </div>
+      )}
 
       <div className="hash">{txLabel} · <a href={explorer} target="_blank" rel="noreferrer">view on explorer</a></div>
 
       {done && <button className="btn sec" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>Start another</button>}
       {failed && (
         <div className="status-actions">
-          <button className="btn" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>Try again</button>
-          <a className="btn sec" style={{ textDecoration: 'none' }} href={`mailto:${SUPPORT_EMAIL}?subject=Relay order ${order.id}`}>Contact support</a>
+          {!live && <button className="btn" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>Try again</button>}
+          <a className={live ? 'btn' : 'btn sec'} style={{ textDecoration: 'none' }} href={`mailto:${SUPPORT_EMAIL}?subject=Relay order ${order.id}`}>Contact support</a>
         </div>
       )}
     </>

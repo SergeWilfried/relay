@@ -51,3 +51,15 @@ export async function listServerOrders(): Promise<ServerOrder[]> {
   if (!res.ok) throw new Error(await readError(res));
   return ((await res.json()) as { orders: ServerOrder[] }).orders;
 }
+
+/** The patch to apply to a local order so it mirrors the server's view; null when nothing changed. */
+export function patchFromServer(o: Order, s: ServerOrder): Partial<Order> | null {
+  const server: NonNullable<Order['server']> = { status: s.status, payout: s.payout?.status ?? null, payoutError: s.payout?.error ?? null, note: s.note };
+  const same = o.server && o.server.status === server.status && o.server.payout === server.payout && o.server.payoutError === server.payoutError && o.server.note === server.note;
+  const patch: Partial<Order> = same ? {} : { server };
+  if (s.status === 'processing' && o.awaitingDeposit) Object.assign(patch, { awaitingDeposit: false, startedAt: s.startedAt ?? Date.now(), depositTx: s.depositTx ?? o.depositTx });
+  return Object.keys(patch).length ? patch : null;
+}
+
+/** Terminal server states: nothing more to poll for. */
+export const isSettled = (o: Order) => !!o.server && (o.server.status === 'underpaid' || ['paid', 'failed', 'rejected'].includes(o.server.payout ?? ''));

@@ -67,16 +67,18 @@ export function buildOrder(tab: Tab, from: Asset, to: Asset, provider: Provider 
       steps: [[`Sold ${quote.summaryFrom}`, `${gross} FCFA onto the fiat rail`], ['FCFA settled', 'Instant clearing'], [`Bought ${quote.summaryTo}`, 'Delivered to your wallet']] };
   }
   const p = provider!;
+  const number = opts?.phone ?? p.number; // the number the user entered, else the placeholder (demo)
   if (tab === 'buy') {
     return { ...base,
       title: 'Processing purchase…', doneTitle: `${from.sym} delivered`, sub: `FCFA → ${from.sym}`,
       doneSub: `${quote.summaryTo} in your wallet`,
       steps: [[`${p.name} debited`, `${fmtInt(amount)} FCFA · ${p.number}`], ['FCFA settled', 'Instant clearing'], [`${from.sym} delivered`, `${fmtCrypto(quote.toValue, from.dec, from.dec)} ${from.sym} to ${short(wallet)}`]] };
   }
-  return { ...base,
+  const quoteWithNumber = { ...quote, rows: quote.rows.map((r): [string, string] => (r[0] === 'Payout account' ? ['Payout account', `${p.name} ${number}`] : r)) };
+  return { ...base, quote: quoteWithNumber,
     title: 'Cashing out…', doneTitle: 'Cash out sent', sub: `${from.sym} → FCFA`,
     doneSub: `${quote.summaryTo} on the way to ${p.name}`,
-    steps: [['Deposit received', `${quote.summaryFrom} confirmed on-chain`], ['Sold at market', `${gross} FCFA settled`], [`Sent to ${p.name}`, p.number]] };
+    steps: [['Deposit received', `${quote.summaryFrom} confirmed on-chain`], ['Sold at market', `${gross} FCFA settled`], [`Sent to ${p.name}`, number]] };
 }
 
 /** Turn a locked draft into a live order. Sell orders wait for the on-chain deposit first. */

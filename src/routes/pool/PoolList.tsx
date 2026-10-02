@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState';
 import { FEES_30D } from '../../lib/data';
 import { usePools } from '../../lib/pools';
+import { useFcfaAvatar } from '../../lib/geo';
 import { fmtInt, lenStep } from '../../lib/format';
 import { useApp } from '../../state/app';
 import { AssetIcon } from '../../components/AssetIcon';
@@ -12,6 +13,7 @@ export default function PoolList() {
   const { position } = useApp();
   const joined = position > 0;
   const { state, retry } = usePools();
+  const fcfaAvatar = useFcfaAvatar();
   const pools = state.status === 'ready' ? state.pools : [];
   // offer "Start earning" only to users with no position, and only when there is a pool to join
   const canStart = !joined && state.status === 'ready' && pools.length > 0;
@@ -58,7 +60,7 @@ export default function PoolList() {
         <div className="pools">
           {pools.map((p) => (
             <Link key={p.id} to={`/pool/${p.id}`} className="pool-row" style={{ textDecoration: 'none', color: 'inherit' }}>
-              <AssetIcon char={p.char} color={p.color} logo={p.logo} />
+              <AssetIcon char={p.char} color={p.color} logo={p.id === 'fcfa' ? fcfaAvatar.logo : p.logo} />
               <div className="pool-main">
                 <div className="pool-n">{p.name}</div><div className="pool-b" data-len={lenStep(p.blurb, 34, 44)}>{p.blurb}</div>
                 <div className="util"><i style={{ width: `${p.util}%` }} /></div>

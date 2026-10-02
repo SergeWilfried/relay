@@ -2,7 +2,7 @@
 -- Status flow: pending_approval -> approved -> sending -> paid | failed ; pending_approval -> rejected.
 -- 'sending' also holds ambiguous outcomes (provider call errored); those are resolved by a human, never auto-retried.
 ALTER TABLE orders ADD COLUMN phone TEXT;      -- E.164, e.g. +2250789458900
-ALTER TABLE orders ADD COLUMN operator TEXT;   -- orange | wave | mtn | moov
+ALTER TABLE orders ADD COLUMN operator TEXT;   -- orange | wave | pispi | moov
 
 CREATE TABLE IF NOT EXISTS payouts (
   id            TEXT PRIMARY KEY,              -- also the idempotency reference sent to the provider

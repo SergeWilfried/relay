@@ -11,6 +11,9 @@ import { useQuote } from '../../lib/api';
 import { useOnline } from '../../lib/net';
 import { shortAddr } from '../../lib/quote';
 import { WalletSheet } from '../../components/WalletSheet';
+import { PhoneSheet, validPhone } from '../../components/PhoneSheet';
+import { useAuth } from '../../auth/AuthContext';
+import { useFcfaAvatar } from '../../lib/geo';
 import { useTrade } from '../../state/trade';
 
 const isTab = (t?: string): t is Tab => t === 'swap' || t === 'buy' || t === 'sell';
@@ -26,6 +29,9 @@ export default function TradeForm() {
   const nav = useNavigate();
   const [picker, setPicker] = useState<'from' | 'to' | null>(null);
   const [walletOpen, setWalletOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const auth = useAuth();
+  const fcfaAvatar = useFcfaAvatar();
 
   // the URL is the source of truth for the tab; switching resets the form
   useEffect(() => { if (isTab(param) && param !== t.tab) t.switchTab(param); }, [param]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -44,12 +50,14 @@ export default function TradeForm() {
   const needProv = showPay && t.amountOk && !t.provider;
   const zero = parseAmount(t.amount) <= 0;
   // buying to a network where the user has no wallet (e.g. Bitcoin) needs an address first
+  // live payouts go to a number the user typed; demo mode falls back to the placeholder number
+  const needPhone = tab === 'sell' && auth.mode === 'privy' && t.amountOk && !!t.provider && !(t.phone && validPhone(t.phone));
   const needWallet = tab === 'buy' && !!t.wallet.missing && t.amountOk && !!t.provider;
-  const cta = !online ? "You're offline" : failed ? 'Quote unavailable' : q.insufficient && !zero ? 'Insufficient balance' : needAmt ? 'Confirm amount' : needProv ? 'Choose a provider' : needWallet ? 'Add receiving address' : CTA[tab];
-  const disabled = needWallet || !online || failed || zero || stale || q.insufficient || needProv;
+  const cta = !online ? "You're offline" : failed ? 'Quote unavailable' : q.insufficient && !zero ? 'Insufficient balance' : needAmt ? 'Confirm amount' : needProv ? 'Choose a provider' : needPhone ? 'Add your mobile money number' : needWallet ? 'Add receiving address' : CTA[tab];
+  const disabled = needPhone || needWallet || !online || failed || zero || stale || q.insufficient || needProv;
 
   const crypto = (a: Asset): { sym: string; net: string; char: string; color: string; logo?: string; onClick?: () => void } => ({ sym: a.sym, net: a.net, char: a.char, color: a.color, logo: a.logo });
-  const fcfa = (net: string) => ({ sym: 'FCFA', net, char: 'F', color: FCFA_COLOR });
+  const fcfa = (net: string) => ({ sym: 'FCFA', net, char: 'F', color: FCFA_COLOR, logo: fcfaAvatar.logo });
   const provNet = t.provider?.name ?? 'Mobile money';
 
   const fromChip = tab === 'buy' ? fcfa(provNet) : { ...crypto(t.from), onClick: () => setPicker('from') };
@@ -90,7 +98,11 @@ export default function TradeForm() {
       )}
       {showPay && t.provider && (
         <>
-          <FieldRow label={tab === 'sell' ? 'Cash out to mobile money number' : 'Mobile money number'} value={t.provider.number} hint={t.provider.name} />
+          {tab === 'sell' ? (
+            <FieldRow label="Cash out to mobile money number" value={t.phone ?? (auth.mode === 'privy' ? 'Add your number' : t.provider.number)} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
+          ) : (
+            <FieldRow label="Mobile money number" value={t.provider.number} hint={t.provider.name} />
+          )}
           {tab === 'buy' && <FieldRow label="Receiving wallet" value={t.wallet.missing ? `Add a ${t.from.net} address` : shortAddr(t.wallet.address)} hint={t.wallet.custom ? 'Custom' : t.from.net} onClick={() => setWalletOpen(true)} />}
         </>
       )}
@@ -98,6 +110,7 @@ export default function TradeForm() {
       <div className="agree">By clicking “{CTA[tab]}”, you agree to the <a href="#terms">User Agreement</a>.</div>
       <button className="btn" disabled={disabled && !needAmt} onClick={go}>{cta}</button>
 
+      {phoneOpen && t.provider && <PhoneSheet operator={t.provider.name} current={t.phone} onSave={t.setPhone} onClose={() => setPhoneOpen(false)} />}
       {walletOpen && <WalletSheet net={t.from.net} current={t.wallet} onPick={t.setWallet} onClose={() => setWalletOpen(false)} />}
       {picker && (
         <AssetPicker

@@ -33,13 +33,15 @@ export interface Provider {
   color: string;
   fg: string;
   number: string;
+  /** logo under /public/providers; falls back to the lettered circle */
+  logo?: string;
 }
 
 export const PROVIDERS: Provider[] = [
-  { id: 'orange', name: 'Orange Money', char: 'O', color: '#FF7900', fg: '#fff', number: '+225 07 89 45 89' },
-  { id: 'wave', name: 'Wave', char: 'W', color: '#1DC8FF', fg: '#fff', number: '+225 05 55 01 22' },
-  { id: 'mtn', name: 'MTN MoMo', char: 'M', color: '#FFCB05', fg: '#1a1a1a', number: '+225 05 44 12 76' },
-  { id: 'moov', name: 'Moov Money', char: 'M', color: '#0066B3', fg: '#fff', number: '+225 01 02 33 48' },
+  { id: 'orange', name: 'Orange Money', char: 'O', color: '#FF7900', fg: '#fff', number: '+225 07 89 45 89', logo: '/providers/orange.png' },
+  { id: 'wave', name: 'Wave', char: 'W', color: '#1DC8FF', fg: '#fff', number: '+225 05 55 01 22', logo: '/providers/wave.png' },
+  { id: 'pispi', name: 'PI-SPI', char: 'π', color: '#FAB900', fg: '#1a1a1a', number: '+225 07 12 34 56', logo: '/providers/pispi.png' },
+  { id: 'moov', name: 'Moov Money', char: 'M', color: '#0066B3', fg: '#fff', number: '+225 01 02 33 48', logo: '/providers/moov.png' },
 ];
 
 export const WALLET = '0x8f3C4a92eE71B2d5C1f0A6b39C21d4E87a550c21';

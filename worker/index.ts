@@ -12,6 +12,12 @@ const DEDUPE_TTL_SECONDS = 7 * 24 * 60 * 60; // Privy retries for about a day; k
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
+/** Visitor country (ISO 3166-1 alpha-2) from Cloudflare's IP geolocation. Cosmetic only: never use it for KYC, limits or payouts (VPNs). */
+const countryOf = (request: Request): string | null => {
+	const c = (request.cf?.country as string | undefined) ?? request.headers.get('cf-ipcountry');
+	return c && /^[A-Z]{2}$/.test(c) ? c : null; // 'XX' / 'T1' (unknown / Tor) fail the regex or map to no flag on the client
+};
+
 async function privyWebhook(request: Request, env: Env): Promise<Response> {
 	if (!env.PRIVY_WEBHOOK_SIGNING_SECRET) {
 		console.error(JSON.stringify({ msg: 'PRIVY_WEBHOOK_SIGNING_SECRET is not set' }));
@@ -122,6 +128,7 @@ export default {
 		const { pathname } = new URL(request.url);
 		try {
 			if (pathname === '/api/health') return json({ ok: true });
+			if (pathname === '/api/geo') return Response.json({ country: countryOf(request) }, { headers: { 'cache-control': 'private, max-age=3600' } });
 			if (pathname === '/api/webhooks/privy') {
 				if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 				return await privyWebhook(request, env);
