@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -5,8 +6,14 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 
 export default defineConfig({
   // one copy of React for the app and the Privy SDK (a second copy breaks hooks)
-  resolve: { dedupe: ['react', 'react-dom'] },
-  optimizeDeps: { include: ['@privy-io/react-auth'] },
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+    // Rolldown resolves virtual:pwa-register against the app root, not vite-plugin-pwa's nested deps
+    alias: {
+      'workbox-window': fileURLToPath(import.meta.resolve('workbox-window')),
+    },
+  },
+  optimizeDeps: { include: ['@privy-io/react-auth', 'workbox-window'] },
   build: {
     rollupOptions: {
       output: {
