@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { shortAddr } from '../lib/quote';
 import { useApp } from '../state/app';
 import { useTheme } from '../state/theme';
 
@@ -14,8 +15,11 @@ function WalletRow({ net, address, status, error }: { net: 'Ethereum' | 'Solana'
     <div className="field">
       <div style={{ minWidth: 0 }}>
         <div className="field-l">{net} wallet</div>
-        <div className="field-v" style={{ fontSize: 11.5, wordBreak: 'break-all', color: address ? undefined : 'var(--fnt)' }}>
-          {address ?? (status === 'creating' ? 'Setting up…' : error ? "Couldn't be created" : 'Not set up')}
+        <div className="field-v" style={{ fontSize: 11.5, color: address ? undefined : 'var(--fnt)' }}>
+          {address ? (
+            // phones show 0x8f3C…0c21; wider screens show the full address (Copy always copies the full one)
+            <><span className="addr-short" title={address}>{shortAddr(address)}</span><span className="addr-full">{address}</span></>
+          ) : (status === 'creating' ? 'Setting up…' : error ? "Couldn't be created" : 'Not set up')}
         </div>
       </div>
       {address && <button className="copy" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>}
@@ -35,7 +39,7 @@ export default function Account() {
         {auth.mode === 'demo' && (
           <div className="notice warn">Demo mode: sign-in is off and wallets are placeholders. Set <b>VITE_PRIVY_APP_ID</b> to use Privy.</div>
         )}
-        {auth.email && <div className="field"><div><div className="field-l">Signed in as</div><div className="field-v" style={{ fontFamily: 'inherit' }}>{auth.email}</div></div></div>}
+        {auth.email && <div className="field"><div><div className="field-l">Signed in as</div><div className="field-v ellipsis" style={{ fontFamily: 'inherit' }}>{auth.email}</div></div></div>}
         <WalletRow net="Ethereum" address={auth.wallets.Ethereum} status={auth.walletStatus} error={auth.walletErrors.Ethereum} />
         <WalletRow net="Solana" address={auth.wallets.Solana} status={auth.walletStatus} error={auth.walletErrors.Solana} />
         {auth.walletStatus === 'error' && (

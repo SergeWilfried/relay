@@ -3,7 +3,7 @@
 import sharp from 'sharp';
 
 const jobs = [
-  { src: 'Wave.png', out: 'wave' },
+  { src: 'Wave.png', out: 'wave-logo' },
   { src: 'orange-money.png', out: 'orange', crop: { left: 40, top: 125, width: 200, height: 200 } },
   { src: 'moov-money.png', out: 'moov' },
   { src: 'pi-spi.png', out: 'pispi' },
