@@ -18,8 +18,7 @@ export interface Asset {
 }
 
 const EVM_ADDR = '0x8f3C4a92eE71B2d5C1f0A6b39C21d4E87a550c21';
-// No ETH logo supplied yet: add public/tokens/eth.png and set `logo` to use it.
-export const ETH: Asset = { sym: 'ETH', net: 'Ethereum', char: 'E', color: '#627EEA', fcfa: 1_652_400, balance: 2.84, dec: 4, explorer: 'https://etherscan.io/tx/',logo: '/tokens/eth.png', deposit: EVM_ADDR };
+export const ETH: Asset = { sym: 'ETH', net: 'Ethereum', char: 'E', color: '#627EEA', fcfa: 1_652_400, balance: 2.84, dec: 4, logo: '/tokens/eth.png', explorer: 'https://etherscan.io/tx/', deposit: EVM_ADDR };
 export const SOL: Asset = { sym: 'SOL', net: 'Solana', char: 'S', color: '#9945FF', fcfa: 1_652_400 / 19.67, balance: 41.2, dec: 4, logo: '/tokens/sol.png', explorer: 'https://solscan.io/tx/', deposit: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU' };
 export const BTC: Asset = { sym: 'BTC', net: 'Bitcoin', char: 'B', color: '#F7931A', fcfa: 54_000_000, balance: 0.085, dec: 6, logo: '/tokens/btc.png', explorer: 'https://mempool.space/tx/', deposit: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq' };
 export const USDT: Asset = { sym: 'USDT', net: 'Ethereum', char: 'T', color: '#26A17B', fcfa: 600, balance: 1250, dec: 2, logo: '/tokens/usdt.png', explorer: 'https://etherscan.io/tx/', deposit: EVM_ADDR };
@@ -62,7 +61,7 @@ export interface Pool {
 
 export const POOLS: Pool[] = [
   { id: 'fcfa', name: 'FCFA rail', char: 'F', color: FCFA_COLOR, blurb: 'Deposit FCFA · mobile money float · TVL 512M', tvl: '512M FCFA', apy: '8.4%', util: 72, feeRate: '0.25%', volume: '96M FCFA' },
-  { id: 'eth', name: 'ETH', char: 'E', color: ETH.color, blurb: 'Deposit ETH · 0.25% fee · TVL 198M', tvl: '198M FCFA', apy: '6.1%', util: 54, feeRate: '0.25%', volume: '31M FCFA' },
+  { id: 'eth', name: 'ETH', char: 'E', color: ETH.color, logo: ETH.logo, blurb: 'Deposit ETH · 0.25% fee · TVL 198M', tvl: '198M FCFA', apy: '6.1%', util: 54, feeRate: '0.25%', volume: '31M FCFA' },
   { id: 'sol', name: 'SOL', char: 'S', color: SOL.color, logo: SOL.logo, blurb: 'Deposit SOL · 0.25% fee · TVL 132M', tvl: '132M FCFA', apy: '7.3%', util: 61, feeRate: '0.25%', volume: '22M FCFA' },
 ];
 

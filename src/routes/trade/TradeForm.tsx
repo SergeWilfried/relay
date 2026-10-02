@@ -14,6 +14,10 @@ import { WalletSheet } from '../../components/WalletSheet';
 import { useTrade } from '../../state/trade';
 
 const isTab = (t?: string): t is Tab => t === 'swap' || t === 'buy' || t === 'sell';
+// keep a little native token back so the wallet can still pay network fees
+const GAS_RESERVE: Record<string, number> = { ETH: 0.002, SOL: 0.01 };
+const maxSpend = (sym: string, bal: number) => Math.max(0, bal - (GAS_RESERVE[sym] ?? 0));
+
 const CTA: Record<Tab, string> = { swap: 'Review swap', buy: 'Review purchase', sell: 'Review cash out' };
 
 export default function TradeForm() {
@@ -59,10 +63,10 @@ export default function TradeForm() {
   };
 
   const maxBtn = tab !== 'buy' && (
-    <button type="button" onClick={() => t.setAmount(String(t.from.balance))}>Max</button>
+    <button type="button" disabled={t.balance === null} onClick={() => t.setAmount(String(maxSpend(t.from.sym, t.balance ?? 0)))}>Max</button>
   );
   const fromSub = tab === 'sell'
-    ? <>Balance {fmtCrypto(t.from.balance)} {t.from.sym} · {maxBtn}</>
+    ? <>Balance {t.balance === null ? '—' : fmtCrypto(t.balance, 2, t.from.dec)} {t.from.sym} · {maxBtn}</>
     : q.fromSub;
 
   return (

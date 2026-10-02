@@ -1,4 +1,5 @@
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { AssetIcon } from '../../components/AssetIcon';
 import { BackHeader } from '../../components/BackHeader';
 import { POOLS } from '../../lib/data';
 import { useApp } from '../../state/app';
@@ -13,7 +14,7 @@ export default function PoolDetail() {
   const cells: [string, string, boolean?][] = [['Fee rate', pool.feeRate], ['24h volume', pool.volume], ['TVL', pool.tvl], ['Utilization', `${pool.util}%`, true]];
   return (
     <div className="card">
-      <BackHeader title={`${pool.name} pool`} to="/pool" />
+      <BackHeader title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><AssetIcon char={pool.char} color={pool.color} logo={pool.logo} size={26} />{pool.name} pool</span>} to="/pool" />
       <div className="grid2">
         {cells.map(([k, v, acc]) => (
           <div className="mini" key={k}><div style={{ fontWeight: 500, fontSize: 12, color: 'var(--mut)' }}>{k}</div><div className="mini-v" style={acc ? { color: 'var(--acct)' } : undefined}>{v}</div></div>

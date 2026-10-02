@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Spinner } from '../../components/Spinner';
 import { StepList } from '../../components/StepList';
@@ -5,14 +6,20 @@ import { SUPPORT_EMAIL } from '../../lib/data';
 import { useNow, useOnline } from '../../lib/net';
 import { deriveProgress, inFlight } from '../../lib/orders';
 import { useApp } from '../../state/app';
+import { useBalances } from '../../state/balances';
 
 export default function Status() {
   const { id } = useParams();
   const nav = useNavigate();
   const { orders } = useApp();
   const online = useOnline();
+  const balances = useBalances();
   const order = orders.find((o) => o.id === id);
   const now = useNow(!!order && inFlight(order, Date.now()), 500);
+
+  const finished = !!order && deriveProgress(order, now).phase === 'done';
+  // the wallet balance changed: re-read it once the order completes
+  useEffect(() => { if (finished) balances.refresh(); }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!order || !order.submitted) return <Navigate to="/activity" replace />;
   const { phase, step } = deriveProgress(order, now);
@@ -21,7 +28,10 @@ export default function Status() {
   const done = phase === 'done';
   const failed = phase === 'failed';
   const stalled = phase === 'stalled';
-  const explorer = order.from.explorer + order.hash.replace('…', '');
+  // prefer the real transaction we sent from the Relay wallet
+  const txHash = order.depositTx ?? order.hash.replace('…', '');
+  const explorer = order.from.explorer + txHash;
+  const txLabel = order.depositTx ? `${order.depositTx.slice(0, 8)}…${order.depositTx.slice(-6)}` : order.hash;
   const refundNote = order.tab === 'sell'
     ? `Your ${order.from.sym} is safe. If it was received, it will be returned to the sending address within 24 hours.`
     : order.tab === 'buy'
@@ -51,7 +61,7 @@ export default function Status() {
       )}
       {failed && <div className="notice warn" role="alert">{refundNote}</div>}
 
-      <div className="hash">{order.hash} · <a href={explorer} target="_blank" rel="noreferrer">view on explorer</a></div>
+      <div className="hash">{txLabel} · <a href={explorer} target="_blank" rel="noreferrer">view on explorer</a></div>
 
       {done && <button className="btn sec" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>Start another</button>}
       {failed && (

@@ -6,6 +6,7 @@ import { buildOrder, type Order } from '../lib/orders';
 import type { QuoteParams } from '../lib/api';
 import { loadProvider, saveProvider, type Wallet } from '../lib/wallet';
 import { useAuth } from '../auth/AuthContext';
+import { useBalances } from './balances';
 import { loadState, saveState } from '../lib/persist';
 
 interface TradeState {
@@ -24,6 +25,8 @@ interface TradeState {
   confirmAmount: () => void;
   switchTab: (t: Tab) => void;
   params: QuoteParams;
+  /** wallet balance of the paid asset (null = unknown) */
+  balance: number | null;
   /** the quote-locked order awaiting confirmation (persisted so a reload resumes the review) */
   draft: Order | null;
   lockDraft: (quote: Quote, amount: number) => Order;
@@ -55,6 +58,8 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   useEffect(() => { saveState('draft', draft); }, [draft]);
 
   const { wallets } = useAuth();
+  const balances = useBalances();
+  const balance = balances.get(from.sym);
   const own = wallets[from.net as keyof typeof wallets];
   const wallet: Wallet = custom && custom.net === from.net ? { address: custom.address, custom: true } : own ? { address: own, custom: false } : { address: '', custom: false, missing: true };
   const setWallet = (w: Wallet) => setCustom(w.custom ? { address: w.address, net: from.net } : null);
@@ -79,13 +84,13 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     (side === 'from' ? setFrom : setTo)(a);
   };
 
-  const params = useMemo<QuoteParams>(() => ({ tab, from, to, provider, wallet: wallet.address }), [tab, from, to, provider, wallet.address]);
+  const params = useMemo<QuoteParams>(() => ({ tab, from, to, provider, wallet: wallet.address, balance }), [tab, from, to, provider, wallet.address, balance]);
 
   const value = useMemo<TradeState>(() => ({
     tab, amount, setAmount, from, to, setAsset, providerId, provider, wallet, setWallet,
     setProvider: (id: string) => { setProviderId(id); saveProvider(id); },
     amountOk, confirmAmount: () => setAmountOk(true),
-    switchTab, params, draft,
+    switchTab, params, balance, draft,
     lockDraft: (quote, n) => {
       const o = buildOrder(tab, from, to, provider, quote, n, wallet.address);
       setDraft(o);
@@ -94,7 +99,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     requoteDraft: (quote) => setDraft((d) => (d ? buildOrder(d.tab, d.from, d.to, d.provider, quote, d.amount, d.wallet, { id: d.id, createdAt: d.createdAt }) : d)),
     clearDraft: () => setDraft(null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [tab, amount, from, to, providerId, provider, amountOk, draft, wallet.address, wallet.custom, params, switchTab]);
+  }), [tab, amount, from, to, providerId, provider, amountOk, draft, wallet.address, wallet.custom, params, balance, switchTab]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

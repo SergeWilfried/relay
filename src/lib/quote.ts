@@ -12,6 +12,8 @@ export interface QuoteInput {
   from: Asset;
   /** swap: asset received. */
   to: Asset;
+  /** wallet balance of the paid asset; null = unknown (don't block), undefined = use the asset's mock balance */
+  balance?: number | null;
 }
 
 export interface Quote {
@@ -36,6 +38,8 @@ export interface Quote {
  */
 export function getQuote(input: QuoteInput, provider: Provider | null, wallet: string, priceMult = 1): Quote {
   const { tab, amount, to } = input;
+  const bal = input.balance === undefined ? input.from.balance : input.balance;
+  const balText = bal === null ? '—' : fmtCrypto(bal, 2, input.from.dec);
   // priceMult simulates the rate moving between quotes (used by the quote refresh)
   const from: Asset = priceMult === 1 ? input.from : { ...input.from, fcfa: input.from.fcfa * priceMult };
   const crypto = from;
@@ -46,7 +50,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
     const rate = `1 ${from.sym} = ${fmtRate(from.fcfa / to.fcfa)} ${to.sym} · ${fmtInt(from.fcfa)} FCFA`;
     return {
       fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtRate(recv),
-      fromSub: `≈ ${fmtInt(round100(gross))} FCFA · Balance ${fmtCrypto(from.balance)} ${from.sym}`,
+      fromSub: `≈ ${fmtInt(round100(gross))} FCFA · Balance ${balText} ${from.sym}`,
       toSub: `≈ ${fmtInt(round100(gross - fee))} FCFA after fees`,
       rate, fee: 'Fee: 0.25% fiat rail · Slippage 0.5%',
       rows: [
@@ -57,7 +61,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
         ['You receive', `${fmtRate(recv)} ${to.sym}`],
       ],
       summaryFrom: `${fmtCrypto(amount, 2, 8)} ${from.sym}`, summaryTo: `${fmtRate(recv)} ${to.sym}`,
-      insufficient: amount > from.balance, fcfaGross: gross, toValue: recv,
+      insufficient: bal !== null && amount > bal, fcfaGross: gross, toValue: recv,
     };
   }
   if (tab === 'buy') {
@@ -93,7 +97,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
   const p = provider;
   return {
     fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtInt(get),
-    fromSub: `Balance ${fmtCrypto(crypto.balance)} ${crypto.sym} · Max`,
+    fromSub: `Balance ${balText} ${crypto.sym} · Max`,
     toSub: 'Arrives in 1–2 minutes',
     rate, fee: `Fee: 0.25% · ${fmtInt(fee)} FCFA`,
     rows: [
@@ -104,7 +108,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
       ['You get', `${fmtInt(get)} FCFA`],
     ],
     summaryFrom: `${fmtCrypto(amount, 2, 8)} ${crypto.sym}`, summaryTo: `${fmtInt(get)} FCFA`,
-    insufficient: amount > crypto.balance, fcfaGross: gross, toValue: get,
+    insufficient: bal !== null && amount > bal, fcfaGross: gross, toValue: get,
   };
 }
 

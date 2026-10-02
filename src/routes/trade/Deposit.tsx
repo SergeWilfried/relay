@@ -6,7 +6,10 @@ import { BackHeader } from '../../components/BackHeader';
 import { Spinner } from '../../components/Spinner';
 import { submitApi, useSubmit } from '../../lib/api';
 import { mmss, useNow } from '../../lib/net';
+import { fmtCrypto } from '../../lib/format';
+import { useAuth } from '../../auth/AuthContext';
 import { useApp } from '../../state/app';
+import { useBalances } from '../../state/balances';
 
 export default function Deposit() {
   const { id } = useParams();
@@ -14,12 +17,13 @@ export default function Deposit() {
   const { orders, updateOrder, removeOrder } = useApp();
   const order = orders.find((o) => o.id === id);
   const { run, busy, error } = useSubmit();
+  const auth = useAuth();
+  const balances = useBalances();
   const [qr, setQr] = useState('');
   const [copied, setCopied] = useState(false);
   const now = useNow(!!order?.awaitingDeposit);
 
-  // Placeholder: in production this is the per-order deposit address returned by the API.
-  const addr = order?.from.deposit ?? '';
+  const addr = order?.depositAddress ?? order?.from.deposit ?? '';
   useEffect(() => { if (addr) QRCode.toDataURL(addr, { margin: 0, width: 296, errorCorrectionLevel: 'M' }).then(setQr); }, [addr]);
 
   if (!order) return <Navigate to="/trade/sell" replace />;
@@ -36,6 +40,16 @@ export default function Deposit() {
   const sent = () => run(async () => {
     await submitApi();
     updateOrder(order.id, { awaitingDeposit: false, startedAt: Date.now() });
+    nav(`/trade/status/${order.id}`, { replace: true });
+  });
+  // Real funds only ever go to a configured (live) deposit address; the placeholder would lose them.
+  const unsafe = auth.mode === 'privy' && !order.depositLive;
+  const balance = balances.get(order.from.sym);
+  const short = balance !== null && balance < order.amount;
+  const canSendInApp = auth.canSend(order.from.sym) && !unsafe;
+  const sendFromWallet = () => run(async () => {
+    const hash = await auth.sendAsset(order.from.sym, addr, order.amount);
+    updateOrder(order.id, { awaitingDeposit: false, startedAt: Date.now(), depositTx: hash });
     nav(`/trade/status/${order.id}`, { replace: true });
   });
   const cancel = () => { removeOrder(order.id); nav('/trade/sell', { replace: true }); };
@@ -74,8 +88,26 @@ export default function Deposit() {
             </div>
             <button className="copy" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
           </div>
-          <div className="wait"><Spinner /><span>Waiting for your deposit…</span></div>
-          <ActionButton busy={busy} busyLabel="Checking…" onClick={sent}>I've sent it</ActionButton>
+          {unsafe && (
+            <div className="notice warn" role="alert" style={{ marginTop: 12 }}>
+              <b>Deposit address not configured.</b> This is a placeholder, so don't send real funds. Set <b>VITE_DEPOSIT_ADDR_{order.from.net === 'Solana' ? 'SOL' : order.from.net === 'Bitcoin' ? 'BTC' : 'ETH'}</b> (or return a per-order address from your API).
+            </div>
+          )}
+          {canSendInApp ? (
+            <>
+              <ActionButton style={{ marginTop: 12 }} busy={busy} busyLabel="Waiting for confirmation…" disabled={short} onClick={sendFromWallet}>
+                Send {order.quote.summaryFrom} from your Relay wallet
+              </ActionButton>
+              {short && <div className="note" style={{ color: '#C43232' }}>Your Relay wallet has {balance === null ? '—' : fmtCrypto(balance, 2, order.from.dec)} {order.from.sym}. Add funds or send from another wallet.</div>}
+              <div className="wait" style={{ marginBottom: 6 }}><Spinner /><span>Or send it yourself · we'll detect your deposit</span></div>
+              <ActionButton className="btn sec" busy={false} onClick={sent} disabled={busy}>I've sent it from another wallet</ActionButton>
+            </>
+          ) : (
+            <>
+              <div className="wait"><Spinner /><span>Waiting for your deposit…</span></div>
+              <ActionButton busy={busy} busyLabel="Checking…" onClick={sent}>I've sent it</ActionButton>
+            </>
+          )}
           <ErrorNote>{error}</ErrorNote>
           <div className="note"><button className="qlink" onClick={cancel}>Cancel order</button></div>
         </>

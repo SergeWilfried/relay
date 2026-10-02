@@ -28,5 +28,11 @@
         },
         "vars": {
             "LIVE": "false"
-        }
+        },
+        // KV: webhook idempotency (processed event ids) + a small user/wallet index.
+        // `vite dev`/`wrangler dev` provision it locally; for production let `wrangler deploy` provision it
+        // or run `npx wrangler kv namespace create relay-events` and add the id here.
+        "kv_namespaces": [{ "binding": "EVENTS" }]
+        // Secret (never put it in this file): npx wrangler secret put PRIVY_WEBHOOK_SIGNING_SECRET
+        // Local: copy .dev.vars.example to .dev.vars
     }

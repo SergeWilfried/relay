@@ -4,7 +4,10 @@ import { AuthCtx, type AuthState } from './AuthContext';
 
 const demo: AuthState = {
   mode: 'demo', ready: true, authenticated: true, userId: 'demo', email: null,
-  wallets: DEMO_WALLETS, walletStatus: 'ready', walletErrors: {}, retryWallets: () => {},
+  wallets: DEMO_WALLETS,
+  // demo mode never moves funds: pretend the transfer went through
+  canSend: (sym) => sym !== 'BTC',
+  sendAsset: async () => { await new Promise((r) => setTimeout(r, 900)); return `0xdemo${Date.now().toString(16)}`; }, walletStatus: 'ready', walletErrors: {}, retryWallets: () => {},
   openLogin: () => {}, logout: async () => {}, getAccessToken: async () => null,
 };
 

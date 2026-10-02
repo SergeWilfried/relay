@@ -9,7 +9,9 @@
     "deploy": "wrangler deploy",
     "preview": "vite preview",
     "icons": "node scripts/icons.mjs",
-    "tokens": "node scripts/tokens.mjs"
+    "tokens": "node scripts/tokens.mjs",
+    "types:worker": "wrangler types --include-runtime false",
+    "test:worker": "node --test \"test/*.test.ts\""
   },
   "dependencies": {
     "@fontsource-variable/figtree": "^5.3.0",

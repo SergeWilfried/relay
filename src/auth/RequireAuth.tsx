@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AppProvider } from '../state/app';
+import { BalancesProvider } from '../state/balances';
 import { setPersistScope } from '../lib/persist';
 import { useAuth } from './AuthContext';
 import { Splash } from './Splash';
@@ -11,5 +12,5 @@ export function RequireAuth() {
   if (!ready) return <Splash />;
   if (!authenticated || !userId) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />;
   setPersistScope(userId); // before any child reads persisted state
-  return <AppProvider key={userId}><Outlet /></AppProvider>;
+  return <AppProvider key={userId}><BalancesProvider><Outlet /></BalancesProvider></AppProvider>;
 }

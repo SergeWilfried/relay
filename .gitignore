@@ -13,6 +13,7 @@
 .env.production.local
 .env
 /node_modules
+/api/node_modules
 /dist
 /build
 /coverage

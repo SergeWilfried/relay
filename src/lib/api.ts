@@ -7,7 +7,7 @@ import { useDebounced } from './useDebounced';
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export interface QuoteParams { tab: Tab; from: Asset; to: Asset; provider: Provider | null; wallet: string }
+export interface QuoteParams { tab: Tab; from: Asset; to: Asset; provider: Provider | null; wallet: string; balance?: number | null }
 
 /** Quote API stand-in: replace the body with a real request. `refresh` = re-quote of a locked order. */
 export async function fetchQuote(p: QuoteParams, amount: number, opts: { refresh?: boolean } = {}): Promise<Quote> {
@@ -15,7 +15,7 @@ export async function fetchQuote(p: QuoteParams, amount: number, opts: { refresh
   const f = mockFlag('quote');
   if (f === 'error') throw new Error('Quote unavailable');
   const mult = opts.refresh && f === 'drift' ? 0.994 : 1;
-  return getQuote({ tab: p.tab, amount, from: p.from, to: p.to }, p.provider, p.wallet, mult);
+  return getQuote({ tab: p.tab, amount, from: p.from, to: p.to, balance: p.balance }, p.provider, p.wallet, mult);
 }
 
 /** Order / pool submission stand-in. Rejects with a user-facing message. */
@@ -33,10 +33,10 @@ export type QuoteStatus = 'loading' | 'ready' | 'error';
 export function useQuote(p: QuoteParams, rawAmount: string) {
   const debounced = useDebounced(rawAmount, 250);
   const [nonce, setNonce] = useState(0);
-  const key = `${p.tab}|${p.from.sym}|${p.to.sym}|${p.provider?.id ?? ''}|${p.wallet}|${debounced}|${nonce}`;
-  const local = useMemo(() => getQuote({ tab: p.tab, amount: parseAmount(debounced), from: p.from, to: p.to }, p.provider, p.wallet),
+  const key = `${p.tab}|${p.from.sym}|${p.to.sym}|${p.provider?.id ?? ''}|${p.wallet}|${p.balance ?? 'x'}|${debounced}|${nonce}`;
+  const local = useMemo(() => getQuote({ tab: p.tab, amount: parseAmount(debounced), from: p.from, to: p.to, balance: p.balance }, p.provider, p.wallet),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [p.tab, p.from, p.to, p.provider, p.wallet, debounced]);
+    [p.tab, p.from, p.to, p.provider, p.wallet, p.balance, debounced]);
   const [res, setRes] = useState<{ key: string; quote: Quote | null }>({ key: '', quote: null });
   const latest = useRef(key);
   latest.current = key;

@@ -2,6 +2,7 @@ import { type Asset, type Provider, type Tab } from './data';
 import { fmtCrypto, fmtInt } from './format';
 import type { Quote } from './quote';
 import { mockFlag } from './mock';
+import { depositTargetFor } from './deposit';
 
 export const QUOTE_TTL_MS = 30_000;
 export const DEPOSIT_TTL_MS = 15 * 60_000;
@@ -34,6 +35,10 @@ export interface Order {
   depositExpiresAt: number | null;
   startedAt: number | null;
   outcome: Outcome;
+  /* sell orders: where to send the crypto, and the tx hash if sent from the Relay wallet */
+  depositAddress: string | null;
+  depositLive: boolean;
+  depositTx: string | null;
 }
 
 const short = (a: string) => `${a.slice(0, 5)}…${a.slice(-3)}`;
@@ -46,6 +51,7 @@ export function buildOrder(tab: Tab, from: Asset, to: Asset, provider: Provider 
     id, tab, from, to, provider: tab === 'swap' ? null : provider, wallet, quote, amount, hash,
     createdAt: keep?.createdAt ?? now, quoteExpiresAt: now + QUOTE_TTL_MS,
     submitted: false, awaitingDeposit: false, depositExpiresAt: null, startedAt: null, outcome: 'ok' as Outcome,
+    depositAddress: null as string | null, depositLive: false, depositTx: null as string | null,
   };
   const gross = fmtInt(Math.round(quote.fcfaGross / 100) * 100);
   if (tab === 'swap') {
@@ -72,7 +78,9 @@ export function submitDraft(d: Order): Order {
   const now = Date.now();
   const f = mockFlag('order');
   const outcome: Outcome = f === 'fail' ? 'fail' : f === 'stall' ? 'stall' : 'ok';
+  const target = d.tab === 'sell' ? depositTargetFor(d.from) : null;
   return { ...d, submitted: true, outcome,
+    depositAddress: target?.address ?? null, depositLive: target?.live ?? false,
     awaitingDeposit: d.tab === 'sell',
     depositExpiresAt: d.tab === 'sell' ? now + DEPOSIT_TTL_MS : null,
     startedAt: d.tab === 'sell' ? null : now };

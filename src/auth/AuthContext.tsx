@@ -15,6 +15,10 @@ export interface AuthState {
   walletStatus: 'ready' | 'creating' | 'error';
   walletErrors: Partial<Record<'Ethereum' | 'Solana', string>>;
   retryWallets: () => void;
+  /** Can this asset be sent from the user's Relay wallet? (false for BTC, or when the wallet doesn't exist yet) */
+  canSend: (sym: string) => boolean;
+  /** Sends `amount` of `sym` from the Relay wallet to `to`. Resolves with the transaction hash / signature. */
+  sendAsset: (sym: string, to: string, amount: number) => Promise<string>;
   /** Opens Privy's full login modal (passkey, social, SMS/WhatsApp and wallet, as enabled in the dashboard). */
   openLogin: () => void;
   logout: () => Promise<void>;
