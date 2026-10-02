@@ -1,9 +1,11 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './layouts/AppShell';
 import { ThemeProvider } from './state/theme';
 import { AuthProvider } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
 import Login from './routes/Login';
+const Admin = lazy(() => import('./routes/admin/Admin')); // separate chunk: ordinary users never download it
 import { TradeLayout } from './routes/trade/TradeLayout';
 import { PoolLayout } from './routes/pool/PoolLayout';
 import TradeForm from './routes/trade/TradeForm';
@@ -33,6 +35,8 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="login" element={<Login />} />
+            {/* internal back office: its own login (the admin key), not linked from the app */}
+            <Route path="admin" element={<Suspense fallback={null}><Admin /></Suspense>} />
             <Route element={<RequireAuth />}>
             <Route element={<AppShell />}>
               <Route index element={<Navigate to="/trade/swap" replace />} />

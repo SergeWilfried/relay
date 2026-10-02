@@ -8,17 +8,23 @@ export interface PayoutRow {
 	approved_at: number | null; paid_at: number | null; created_at: number; updated_at: number;
 }
 
+/** Payout plus the order context an approver needs to see. */
+export interface AdminPayoutRow extends PayoutRow { asset: string; order_amount: string; network: string; deposit_tx: string | null; order_note: string | null }
+
 export class Conflict extends Error {}
 
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ msg, ...extra }));
 
 export const getPayout = (env: Env, id: string) => env.DB.prepare('SELECT * FROM payouts WHERE id = ?').bind(id).first<PayoutRow>();
 
-export async function listPayouts(env: Env, status?: string): Promise<PayoutRow[]> {
+const ADMIN_SELECT = `SELECT p.*, o.asset, o.amount AS order_amount, o.network, o.deposit_tx, o.note AS order_note
+	FROM payouts p JOIN orders o ON o.id = p.order_id`;
+
+export async function listPayouts(env: Env, status?: string): Promise<AdminPayoutRow[]> {
 	const q = status
-		? env.DB.prepare('SELECT * FROM payouts WHERE status = ? ORDER BY created_at LIMIT 200').bind(status)
-		: env.DB.prepare('SELECT * FROM payouts ORDER BY created_at DESC LIMIT 200');
-	return (await q.all<PayoutRow>()).results;
+		? env.DB.prepare(`${ADMIN_SELECT} WHERE p.status = ? ORDER BY p.created_at LIMIT 200`).bind(status)
+		: env.DB.prepare(`${ADMIN_SELECT} ORDER BY p.created_at DESC LIMIT 200`);
+	return (await q.all<AdminPayoutRow>()).results;
 }
 
 /** Every transition is a conditional UPDATE: only the expected current status can move, so double clicks and retries are harmless. */

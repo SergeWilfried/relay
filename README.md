@@ -64,7 +64,7 @@ Lifecycle: `pending_approval` -> `approved` -> `sending` -> `paid` | `failed`; `
 - If the provider call errors (outcome unknown) the payout stays `sending` with an `UNKNOWN OUTCOME` note. It is never retried automatically:
   check the provider's dashboard, then `resolve` it as paid or failed. Only a definitively `failed` payout can be `retry`-ed.
 
-Release payouts (needs `ADMIN_API_KEY`, 16+ chars, as a secret):
+Release payouts from the admin page at **`/admin`** (sign in with the `ADMIN_API_KEY`; tabs: Needs approval / In progress / Failed / Done; every action shows a confirmation with the amount, number and deposit tx first). The key is kept in `sessionStorage` only. **Put `/admin` and `/api/admin/*` behind Cloudflare Access (or an IP allowlist) in production**: the key alone is the only protection otherwise. Or use the CLI (same `ADMIN_API_KEY`, 16+ chars, as a secret):
 ```bash
 node scripts/admin-payouts.mjs list pending_approval
 node scripts/admin-payouts.mjs approve <payoutId>
