@@ -18,6 +18,10 @@ export async function createDepositWallet(env: Env, asset: SellAsset, orderId: s
 		return { address, walletId: null, live: false };
 	}
 	if (!env.PRIVY_APP_ID || !env.PRIVY_APP_SECRET) throw new Error('PRIVY_APP_ID / PRIVY_APP_SECRET are required when LIVE=true');
+	// Fail closed: a live deposit wallet without a policy could sign anything, so refuse to create one.
+	// Create the policies with `node scripts/privy-policies.mjs --apply` and set the ids as secrets.
+	const policyId = asset.chainType === 'ethereum' ? env.PRIVY_DEPOSIT_POLICY_EVM : env.PRIVY_DEPOSIT_POLICY_SOL;
+	if (!policyId) throw new Error(`PRIVY_DEPOSIT_POLICY_${asset.chainType === 'ethereum' ? 'EVM' : 'SOL'} is required when LIVE=true`);
 	const res = await fetch('https://api.privy.io/v1/wallets', {
 		method: 'POST',
 		headers: {
@@ -26,7 +30,7 @@ export async function createDepositWallet(env: Env, asset: SellAsset, orderId: s
 			authorization: `Basic ${btoa(`${env.PRIVY_APP_ID}:${env.PRIVY_APP_SECRET}`)}`,
 			'privy-idempotency-key': `deposit-wallet-${orderId}`, // safe to retry: the same order always gets the same wallet
 		},
-		body: JSON.stringify({ chain_type: asset.chainType, external_id: orderId.slice(0, 64), display_name: `Deposit ${orderId}` }),
+		body: JSON.stringify({ chain_type: asset.chainType, external_id: orderId.slice(0, 64), display_name: `Deposit ${orderId}`, policy_ids: [policyId] }),
 	});
 	if (!res.ok) throw new Error(`Privy wallet creation failed (${res.status})`);
 	const w = (await res.json()) as { id?: string; address?: string };

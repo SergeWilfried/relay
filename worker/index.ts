@@ -1,7 +1,9 @@
 import { AuthError, authenticate } from './auth';
 import { BadRequest, createSellOrder, getOrder, listOrders } from './orders';
-import { approvePayout, Conflict, listPayouts, rejectPayout, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
+import { approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
 import { getProvider } from './payout';
+import { ensureProfile, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
+import { listSweeps, resolveSweep, retrySweep, runSweeps, SweepConflict } from './sweep';
 import { handleEvent, parseEvent } from './privy';
 import { safeEqual, verifySvix, WebhookVerificationError } from './svix';
 
@@ -12,7 +14,7 @@ const DEDUPE_TTL_SECONDS = 7 * 24 * 60 * 60; // Privy retries for about a day; k
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
-/** Visitor country (ISO 3166-1 alpha-2) from Cloudflare's IP geolocation. Cosmetic only: never use it for KYC, limits or payouts (VPNs). */
+/** Visitor country (ISO 3166-1 alpha-2) from Cloudflare's IP geolocation. Cosmetic for the UI; the only rule that uses it is the sanctioned-country DENY (R-01), never to allow or raise a limit (VPNs). */
 const countryOf = (request: Request): string | null => {
 	const c = (request.cf?.country as string | undefined) ?? request.headers.get('cf-ipcountry');
 	return c && /^[A-Z]{2}$/.test(c) ? c : null; // 'XX' / 'T1' (unknown / Tor) fail the regex or map to no flag on the client
@@ -64,7 +66,38 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 
 	if (pathname === '/api/admin/payouts' && request.method === 'GET') return json({ payouts: await listPayouts(env, url.searchParams.get('status') ?? undefined) });
 
-	const m = /^\/api\/admin\/payouts\/([A-Za-z0-9]+)\/(approve|reject|retry|resolve)$/.exec(pathname);
+	if (pathname === '/api/admin/rules' && request.method === 'GET') {
+		const modes = await loadModes(env);
+		return json({ rules: RULES.map((r) => ({ id: r.id, version: r.version, phase: r.phase, description: r.description, action: r.action, configuredMode: r.mode, mode: modes[r.id] ?? r.mode })) });
+	}
+	const rm = /^\/api\/admin\/rules\/([A-Z]-\d{2})\/mode$/.exec(pathname);
+	if (rm && request.method === 'PUT') {
+		const body = (await request.json().catch(() => ({}))) as { mode?: unknown };
+		if (!RULES.some((r) => r.id === rm[1]) || (body.mode !== 'shadow' && body.mode !== 'enforce')) return json({ error: 'Unknown rule or mode (shadow|enforce)' }, 400);
+		await setRuleMode(env, rm[1]!, body.mode);
+		return json({ id: rm[1], mode: body.mode });
+	}
+	const um = /^\/api\/admin\/users\/([^/]{1,200})\/status$/.exec(pathname);
+	if (um && request.method === 'POST') {
+		const body = (await request.json().catch(() => ({}))) as { status?: unknown; note?: unknown };
+		if (!['normal', 'restricted', 'frozen'].includes(body.status as string) || typeof body.note !== 'string' || !body.note) return json({ error: 'status (normal|restricted|frozen) and note are required' }, 400);
+		await setUserStatus(env, decodeURIComponent(um[1]!), body.status as 'normal' | 'restricted' | 'frozen', body.note);
+		return json({ user: decodeURIComponent(um[1]!), status: body.status });
+	}
+
+	if (pathname === '/api/admin/sweeps' && request.method === 'GET') return json({ sweeps: await listSweeps(env, url.searchParams.get('status') ?? undefined) });
+	if (pathname === '/api/admin/sweeps/run' && request.method === 'POST') return json(await runSweeps(env));
+	const sm = /^\/api\/admin\/sweeps\/([a-z0-9]{6,32})\/(retry|resolve)$/.exec(pathname);
+	if (sm && request.method === 'POST') {
+		const body = (await request.json().catch(() => ({}))) as { outcome?: unknown; note?: unknown; txHash?: unknown };
+		try {
+			if (sm[2] === 'retry') return json(await retrySweep(env, sm[1]!));
+			if ((body.outcome !== 'submitted' && body.outcome !== 'failed') || typeof body.note !== 'string' || !body.note) return json({ error: 'outcome (submitted|failed) and note are required' }, 400);
+			return json(await resolveSweep(env, sm[1]!, body.outcome, body.note, typeof body.txHash === 'string' ? body.txHash : undefined));
+		} catch (e) { if (e instanceof SweepConflict) return json({ error: e.message }, 409); throw e; }
+	}
+
+	const m = /^\/api\/admin\/payouts\/([A-Za-z0-9]+)\/(approve|reject|retry|resolve|release-hold)$/.exec(pathname);
 	if (!m || request.method !== 'POST') return json({ error: 'Not found' }, 404);
 	const [, id, action] = m as unknown as [string, string, string];
 	let body: { reason?: unknown; outcome?: unknown; note?: unknown } = {};
@@ -72,6 +105,10 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 	try {
 		if (action === 'approve') return json(await approvePayout(env, id, 'admin'));
 		if (action === 'retry') return json(await retryPayout(env, id));
+		if (action === 'release-hold') {
+			if (typeof body.note !== 'string' || !body.note) return json({ error: 'note is required' }, 400);
+			return json(await releaseHold(env, id, 'admin', body.note));
+		}
 		if (action === 'reject') {
 			if (typeof body.reason !== 'string' || !body.reason) return json({ error: 'reason is required' }, 400);
 			return json(await rejectPayout(env, id, body.reason));
@@ -104,13 +141,19 @@ async function ordersApi(request: Request, env: Env, pathname: string): Promise<
 		return json({ error: 'Authentication is not configured' }, 500);
 	}
 
+	await ensureProfile(env, userId, null, Date.now()); // account age starts at the first authenticated call
+
 	if (pathname === '/api/orders' && request.method === 'POST') {
 		if (Number(request.headers.get('content-length') ?? 0) > MAX_JSON_BYTES) return json({ error: 'Payload too large' }, 413);
 		let input: unknown;
 		try { input = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
 		if (!input || typeof input !== 'object') return json({ error: 'Invalid JSON' }, 400);
-		try { return json(await createSellOrder(env, userId, input as Record<string, unknown> as never), 201); }
-		catch (e) { if (e instanceof BadRequest) return json({ error: e.message }, 400); throw e; }
+		try { return json(await createSellOrder(env, userId, input as Record<string, unknown> as never, countryOf(request)), 201); }
+		catch (e) {
+			if (e instanceof BadRequest) return json({ error: e.message }, 400);
+			if (e instanceof RuleDenied) return json({ error: e.message, rules: e.ruleIds }, e.status as 403 | 422 | 429);
+			throw e;
+		}
 	}
 
 	if (pathname === '/api/orders' && request.method === 'GET') return json({ orders: await listOrders(env, userId) });
@@ -142,5 +185,9 @@ export default {
 			console.error(JSON.stringify({ msg: 'unhandled', path: pathname, error: e instanceof Error ? e.message : String(e) }));
 			return json({ error: 'Internal error' }, 500);
 		}
+	},
+	/** Cron trigger (wrangler.jsonc "triggers"): forwards confirmed deposits to the treasury. */
+	async scheduled(_event, env, ctx): Promise<void> {
+		ctx.waitUntil(runSweeps(env).then((r) => console.log(JSON.stringify({ msg: 'sweep.run', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'sweep.run_failed', error: e instanceof Error ? e.message : String(e) }))));
 	},
 } satisfies ExportedHandler<Env>;

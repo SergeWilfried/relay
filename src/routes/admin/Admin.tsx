@@ -4,6 +4,7 @@ import { Sheet } from '../../components/Sheet';
 import { fmtInt } from '../../lib/format';
 import { useSubmit } from '../../lib/api';
 import * as api from './api';
+import Sweeps from './Sweeps';
 import type { AdminPayout } from './api';
 
 type Tab = 'pending' | 'progress' | 'failed' | 'done' | 'all';
@@ -19,7 +20,10 @@ const when = (t: number) => new Date(t).toLocaleString('en-US', { month: 'short'
 const unknownOutcome = (p: AdminPayout) => p.status === 'sending' && !!p.error?.startsWith('UNKNOWN OUTCOME');
 const tone = (s: AdminPayout['status']) => (s === 'paid' ? 'ok' : s === 'failed' || s === 'rejected' ? 'bad' : '');
 
-type Action = { kind: 'approve' | 'reject' | 'retry' | 'resolve'; p: AdminPayout };
+/** Active while not released and not past its end time (no end time = until an analyst releases it). */
+const holdOf = (p: AdminPayout) => (p.hold_rules && p.hold_released_at === null && (p.hold_until === null || Date.now() < p.hold_until) ? p : null);
+
+type Action = { kind: 'approve' | 'reject' | 'retry' | 'resolve' | 'release'; p: AdminPayout };
 
 function Login({ onDone }: { onDone: () => void }) {
   const [v, setV] = useState('');
@@ -48,12 +52,13 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
   const { run, busy, error } = useSubmit();
   const [text, setText] = useState('');
   const [outcome, setOutcome] = useState<'paid' | 'failed'>('paid');
-  const needsText = kind === 'reject' || kind === 'resolve';
-  const title = { approve: 'Approve payout', reject: 'Reject payout', retry: 'Retry payout', resolve: 'Resolve payout' }[kind];
+  const needsText = kind === 'reject' || kind === 'resolve' || kind === 'release';
+  const title = { approve: 'Approve payout', reject: 'Reject payout', retry: 'Retry payout', resolve: 'Resolve payout', release: 'Release hold' }[kind];
 
   const submit = () => run(async () => {
     if (kind === 'approve') await api.approve(p.id);
     else if (kind === 'retry') await api.retry(p.id);
+    else if (kind === 'release') await api.releaseHold(p.id, text.trim());
     else if (kind === 'reject') await api.reject(p.id, text.trim());
     else await api.resolve(p.id, outcome, text.trim());
     onDone();
@@ -69,6 +74,7 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
         {p.order_note && <div className="sub" style={{ color: '#C43232' }}>Note: {p.order_note}</div>}
       </div>
       {kind === 'approve' && <div className="note" style={{ textAlign: 'left' }}>This sends the money. Check the number and the deposit first: payouts can't be reversed.</div>}
+      {kind === 'release' && <div className="note" style={{ textAlign: 'left' }}>Held by {JSON.parse(p.hold_rules ?? '[]').join(', ')}. The customer was told: “{p.hold_message}” Only release it after checking them; the payout then goes back to normal approval.</div>}
       {kind === 'retry' && <div className="note" style={{ textAlign: 'left' }}>The provider refused this payout, so it is safe to send again.</div>}
       {kind === 'resolve' && (
         <>
@@ -80,12 +86,12 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
         </>
       )}
       {needsText && (
-        <input className="login-in" style={{ marginTop: 10 }} placeholder={kind === 'reject' ? 'Reason (shown to the user)' : 'Note (e.g. provider reference)'} aria-label={kind === 'reject' ? 'Reason' : 'Note'}
+        <input className="login-in" style={{ marginTop: 10 }} placeholder={kind === 'reject' ? 'Reason (shown to the user)' : kind === 'release' ? 'What you checked (kept in the log)' : 'Note (e.g. provider reference)'} aria-label={kind === 'reject' ? 'Reason' : 'Note'}
           value={text} onChange={(e) => setText(e.target.value)} />
       )}
       <ErrorNote>{error}</ErrorNote>
       <ActionButton style={{ marginTop: 14 }} className={kind === 'reject' ? 'btn' : 'btn acc'} busy={busy} busyLabel="Working…" disabled={needsText && text.trim().length < 3} onClick={submit}>
-        {{ approve: `Approve and send ${fmtInt(p.amount_fcfa)} FCFA`, reject: 'Reject payout', retry: 'Retry now', resolve: 'Record outcome' }[kind]}
+        {{ approve: `Approve and send ${fmtInt(p.amount_fcfa)} FCFA`, reject: 'Reject payout', retry: 'Retry now', resolve: 'Record outcome', release: 'Release hold' }[kind]}
       </ActionButton>
     </Sheet>
   );
@@ -94,6 +100,7 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => !!api.getKey());
   const [rows, setRows] = useState<AdminPayout[] | null>(null);
+  const [view, setView] = useState<'payouts' | 'sweeps'>('payouts');
   const [tab, setTab] = useState<Tab>('pending');
   const [action, setAction] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +141,13 @@ export default function Admin() {
         </div>
       </header>
 
+      <div className="admin-tabs" role="tablist" aria-label="Section" style={{ marginBottom: 4 }}>
+        <button role="tab" aria-selected={view === 'payouts'} className={`admin-tab${view === 'payouts' ? ' on' : ''}`} onClick={() => setView('payouts')}>Payouts</button>
+        <button role="tab" aria-selected={view === 'sweeps'} className={`admin-tab${view === 'sweeps' ? ' on' : ''}`} onClick={() => setView('sweeps')}>Sweeps</button>
+      </div>
+      {view === 'sweeps' && <Sweeps onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
+
+      {view === 'payouts' && <>
       <div className="admin-tabs" role="tablist">
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} className={`admin-tab${tab === t.id ? ' on' : ''}`} onClick={() => setTab(t.id)}>
@@ -152,12 +166,15 @@ export default function Admin() {
               <div style={{ fontWeight: 800, fontSize: 15 }}>{fmtInt(p.amount_fcfa)} FCFA <span className={`tag-s ${tone(p.status)}`}>{unknownOutcome(p) ? 'Unknown outcome' : p.status.replace('_', ' ')}</span></div>
               <div className="sub">{p.order_amount} {p.asset} · {p.operator} <span className="mono">{p.phone}</span></div>
               <div className="sub">{when(p.created_at)} · order {p.order_id} · attempts {p.attempts}</div>
+              {holdOf(p) && <div className="sub" style={{ color: '#B7791F' }}>On hold ({JSON.parse(p.hold_rules ?? '[]').join(', ')}) {p.hold_until ? `until ${when(p.hold_until)}` : 'until released'}</div>}
               {p.error && <div className="sub" style={{ color: '#C43232' }}>{p.error}</div>}
               {p.order_note && <div className="sub" style={{ color: '#C43232' }}>Order: {p.order_note}</div>}
             </div>
             <div className="admin-act">
               {p.status === 'pending_approval' && (<>
-                <button className="btn acc sm fit" onClick={() => setAction({ kind: 'approve', p })}>Approve</button>
+                {holdOf(p)
+                  ? <button className="btn acc sm fit" onClick={() => setAction({ kind: 'release', p })}>Release hold</button>
+                  : <button className="btn acc sm fit" onClick={() => setAction({ kind: 'approve', p })}>Approve</button>}
                 <button className="btn sec sm fit" onClick={() => setAction({ kind: 'reject', p })}>Reject</button>
               </>)}
               {p.status === 'failed' && <button className="btn sec sm fit" onClick={() => setAction({ kind: 'retry', p })}>Retry</button>}
@@ -168,6 +185,7 @@ export default function Admin() {
       </div>
 
       {action && <ActionSheet action={action} onClose={() => setAction(null)} onDone={() => { setAction(null); void load(); }} />}
+      </>}
     </div>
   );
 }

@@ -18,6 +18,11 @@ export interface AdminPayout {
   network: string;
   deposit_tx: string | null;
   order_note: string | null;
+  /** set when a rule put the payout on hold (see worker/rules.ts) */
+  hold_rules: string | null;
+  hold_message: string | null;
+  hold_until: number | null;
+  hold_released_at: number | null;
 }
 
 const KEY = 'relay-admin-key';
@@ -45,3 +50,25 @@ export const approve = (id: string) => call<AdminPayout>(`/payouts/${id}/approve
 export const retry = (id: string) => call<AdminPayout>(`/payouts/${id}/retry`, 'POST');
 export const reject = (id: string, reason: string) => call<AdminPayout>(`/payouts/${id}/reject`, 'POST', { reason });
 export const resolve = (id: string, outcome: 'paid' | 'failed', note: string) => call<AdminPayout>(`/payouts/${id}/resolve`, 'POST', { outcome, note });
+export const releaseHold = (id: string, note: string) => call<AdminPayout>(`/payouts/${id}/release-hold`, 'POST', { note });
+
+export interface AdminSweep {
+  order_id: string;
+  wallet_id: string | null;
+  chain: 'ethereum' | 'solana';
+  asset: string;
+  amount_units: string;
+  status: 'pending' | 'sending' | 'submitted' | 'failed' | 'unknown';
+  attempts: number;
+  tx_hash: string | null;
+  tx_id: string | null;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export const listSweeps = () => call<{ sweeps: AdminSweep[] }>('/sweeps').then((r) => r.sweeps);
+export const runSweeps = () => call<{ queued: number; processed: number }>('/sweeps/run', 'POST');
+export const retrySweep = (orderId: string) => call<AdminSweep>(`/sweeps/${orderId}/retry`, 'POST');
+export const resolveSweep = (orderId: string, outcome: 'submitted' | 'failed', note: string, txHash?: string) =>
+  call<AdminSweep>(`/sweeps/${orderId}/resolve`, 'POST', { outcome, note, ...(txHash ? { txHash } : {}) });

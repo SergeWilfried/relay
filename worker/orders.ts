@@ -1,6 +1,8 @@
 import { normalizeAddress, SELL_ASSETS, toUnits } from './assets';
+import { alert } from './alerts';
 import { createDepositWallet } from './depositWallet';
 import { sellPayoutFcfa } from './pricing';
+import { COUNTED, ensureProfile, evaluate, loadFacts, loadModes, logDecision, RuleDenied, windowStarts, type Outcome } from './rules';
 
 export type OrderStatus = 'awaiting_deposit' | 'processing' | 'underpaid';
 
@@ -11,6 +13,7 @@ interface OrderRow {
 	deposit_address: string; deposit_live: number; status: OrderStatus; deposit_tx: string | null;
 	deposit_amount_units: string | null; note: string | null; expires_at: number; started_at: number | null; created_at: number;
 	phone: string | null; operator: string | null;
+	hold_rules: string | null; hold_message: string | null; hold_until: number | null; hold_released_at: number | null;
 	// joined from payouts
 	p_status: string | null; p_amount: number | null; p_error: string | null; p_paid_at: number | null;
 }
@@ -20,14 +23,21 @@ export interface OrderView {
 	id: string; status: OrderStatus; asset: string; amount: string;
 	depositAddress: string; depositLive: boolean; expiresAt: number;
 	startedAt: number | null; depositTx: string | null; note: string | null; payout: PayoutView | null;
+	/** set while the payout is held for review; the client shows the message */
+	hold: { message: string; until: number | null } | null;
 }
 
 const mask = (p: string | null) => (p ? `${p.slice(0, 4)} ·· ${p.slice(-2)}` : null);
+
+/** A hold is active until it is released or its time runs out. NULL hold_until means "until an analyst releases it". */
+export const holdActive = (r: { hold_rules: string | null; hold_until: number | null; hold_released_at: number | null }, now = Date.now()) =>
+	!!r.hold_rules && r.hold_released_at === null && (r.hold_until === null || now < r.hold_until);
 
 const view = (r: OrderRow): OrderView => ({
 	id: r.id, status: r.status, asset: r.asset, amount: r.amount,
 	depositAddress: r.deposit_address, depositLive: r.deposit_live === 1, expiresAt: r.expires_at,
 	startedAt: r.started_at, depositTx: r.deposit_tx, note: r.note,
+	hold: holdActive(r) ? { message: r.hold_message ?? '', until: r.hold_until } : null,
 	payout: r.p_status ? { status: r.p_status, amountFcfa: r.p_amount ?? 0, phoneMasked: mask(r.phone), paidAt: r.p_paid_at, error: r.p_error } : null,
 });
 
@@ -48,7 +58,7 @@ const OPERATORS = new Set(['orange', 'wave', 'pispi', 'moov']);
 const PHONE = /^\+\d{8,15}$/;
 
 /** Idempotent per (user, id): retrying the same request returns the same order and deposit address. */
-export async function createSellOrder(env: Env, userId: string, input: CreateOrderInput): Promise<OrderView> {
+export async function createSellOrder(env: Env, userId: string, input: CreateOrderInput, country: string | null = null): Promise<OrderView> {
 	const id = typeof input.id === 'string' ? input.id : '';
 	const asset = typeof input.asset === 'string' ? SELL_ASSETS[input.asset] : undefined;
 	const amount = typeof input.amount === 'string' ? input.amount : typeof input.amount === 'number' ? String(input.amount) : '';
@@ -66,18 +76,47 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 		return view(existing);
 	}
 
-	const wallet = await createDepositWallet(env, asset, id);
+	// Rules run before a wallet is created: a denied order costs nothing. The FCFA value is priced here, never taken from the client.
 	const now = Date.now();
+	const amountFcfa = sellPayoutFcfa(asset.sym, amount);
+	const profile = await ensureProfile(env, userId, country, now);
+	const facts = await loadFacts(env, userId, { amountFcfa, phone, country }, profile, now);
+	const outcome = evaluate(facts, { modes: await loadModes(env) });
+	if (outcome.action === 'deny') return deny(env, userId, id, outcome);
+
+	const wallet = await createDepositWallet(env, asset, id);
 	const address = normalizeAddress(asset.network, wallet.address);
-	await env.DB.prepare(
+	const w = windowStarts(now);
+	const hold = outcome.action === 'hold' ? outcome : null;
+	// The daily and monthly checks are repeated INSIDE the insert (with the effective, possibly scaled, limits), so two
+	// requests racing past the read above can't both fit under the limit: the second insert matches no rows.
+	const ins = await env.DB.prepare(
 		`INSERT INTO orders (id, user_id, tab, asset, network, amount, amount_units, provider_id, phone, operator, deposit_address,
-		   deposit_wallet_id, deposit_live, status, expires_at, created_at, updated_at)
-		 VALUES (?, ?, 'sell', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_deposit', ?, ?, ?)`,
-	).bind(id, userId, asset.sym, asset.network, amount, toUnits(amount, asset.decimals).toString(),
-		operator, phone, operator, address, wallet.walletId, wallet.live ? 1 : 0,
-		now + DEPOSIT_WINDOW_MS, now, now).run();
+		   deposit_wallet_id, deposit_live, status, expires_at, created_at, updated_at, amount_fcfa, hold_rules, hold_message, hold_until)
+		 SELECT ?8, ?1, 'sell', ?9, ?10, ?11, ?12, ?13, ?14, ?13, ?15, ?16, ?17, 'awaiting_deposit', ?18, ?2, ?2, ?5, ?19, ?20, ?21
+		 WHERE (SELECT COALESCE(SUM(o.amount_fcfa), 0) FROM orders o WHERE ${COUNTED} AND o.created_at >= ?3) + ?5 <= ?6
+		   AND (SELECT COALESCE(SUM(o.amount_fcfa), 0) FROM orders o WHERE ${COUNTED} AND o.created_at >= ?4) + ?5 <= ?7`,
+	).bind(userId, now, w.day, w.month, amountFcfa, outcome.limits.daily, outcome.limits.monthly,
+		id, asset.sym, asset.network, amount, toUnits(amount, asset.decimals).toString(), operator, phone, address,
+		wallet.walletId, wallet.live ? 1 : 0, now + DEPOSIT_WINDOW_MS,
+		hold ? JSON.stringify(hold.ruleIds) : null, hold ? hold.message : null, hold && hold.hours !== null ? now + hold.hours * 3_600_000 : null).run();
+	if (ins.meta.changes === 0) {
+		// lost a race: re-read and report the limit that now applies
+		const again = evaluate(await loadFacts(env, userId, { amountFcfa, phone, country }, profile, now), { modes: await loadModes(env) });
+		const lost: Outcome & { action: 'deny' } = again.action === 'deny' ? again
+			: { action: 'deny', status: 422, message: 'Daily limit reached', ruleIds: ['R-04'], fired: again.fired, limits: again.limits, facts: again.facts };
+		return deny(env, userId, id, lost);
+	}
+	await logDecision(env, { userId, orderId: id, outcome });
+	if (hold) await alert(env, { level: 'info', title: 'Payout will be held for review', details: { order: id, rules: hold.ruleIds.join(', '), amountFcfa, until: hold.hours === null ? 'released by an analyst' : `${hold.hours} h` } });
+	if (country) await env.DB.prepare(`UPDATE user_profile SET last_country = ?, updated_at = ? WHERE user_id = ?`).bind(country, now, userId).run();
 	const row = await env.DB.prepare(`${SELECT_ORDER} WHERE o.id = ?`).bind(id).first<OrderRow>();
 	return view(row!);
+}
+
+async function deny(env: Env, userId: string, orderId: string, outcome: Outcome & { action: 'deny' }): Promise<never> {
+	await logDecision(env, { userId, orderId, outcome });
+	throw new RuleDenied(outcome.message, outcome.status, outcome.ruleIds);
 }
 
 export async function getOrder(env: Env, userId: string, id: string): Promise<OrderView | null> {

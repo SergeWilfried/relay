@@ -1,3 +1,5 @@
+import { alert } from './alerts';
+import { holdActive } from './orders';
 import { getProvider } from './payout';
 
 export type PayoutStatus = 'pending_approval' | 'approved' | 'sending' | 'paid' | 'failed' | 'rejected';
@@ -9,7 +11,8 @@ export interface PayoutRow {
 }
 
 /** Payout plus the order context an approver needs to see. */
-export interface AdminPayoutRow extends PayoutRow { asset: string; order_amount: string; network: string; deposit_tx: string | null; order_note: string | null }
+export interface AdminPayoutRow extends PayoutRow { asset: string; order_amount: string; network: string; deposit_tx: string | null; order_note: string | null;
+	hold_rules: string | null; hold_message: string | null; hold_until: number | null; hold_released_at: number | null }
 
 export class Conflict extends Error {}
 
@@ -17,7 +20,8 @@ const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JS
 
 export const getPayout = (env: Env, id: string) => env.DB.prepare('SELECT * FROM payouts WHERE id = ?').bind(id).first<PayoutRow>();
 
-const ADMIN_SELECT = `SELECT p.*, o.asset, o.amount AS order_amount, o.network, o.deposit_tx, o.note AS order_note
+const ADMIN_SELECT = `SELECT p.*, o.asset, o.amount AS order_amount, o.network, o.deposit_tx, o.note AS order_note,
+	o.hold_rules, o.hold_message, o.hold_until, o.hold_released_at
 	FROM payouts p JOIN orders o ON o.id = p.order_id`;
 
 export async function listPayouts(env: Env, status?: string): Promise<AdminPayoutRow[]> {
@@ -37,9 +41,22 @@ async function transition(env: Env, id: string, from: PayoutStatus[], set: strin
 
 export async function approvePayout(env: Env, id: string, admin: string): Promise<PayoutRow> {
 	const now = Date.now();
+	// a payout on hold can't be approved until the hold runs out or an analyst releases it (see releaseHold)
+	const h = await env.DB.prepare(`SELECT o.hold_rules, o.hold_until, o.hold_released_at FROM payouts p JOIN orders o ON o.id = p.order_id WHERE p.id = ?`)
+		.bind(id).first<{ hold_rules: string | null; hold_until: number | null; hold_released_at: number | null }>();
+	if (h && holdActive(h, now)) throw new Conflict(`Payout is on hold (${h.hold_rules}). Release the hold first.`);
 	if (!(await transition(env, id, ['pending_approval'], `status = 'approved', approved_at = ?, error = NULL`, now))) throw new Conflict('Payout is not awaiting approval');
 	log('payout.approved', { id, admin });
 	return executePayout(env, id);
+}
+
+/** An analyst clears the hold (the matrix's "release: analyst review" / "automatic, or earlier after MFA"). Idempotent. */
+export async function releaseHold(env: Env, id: string, admin: string, note: string): Promise<PayoutRow> {
+	const res = await env.DB.prepare(`UPDATE orders SET hold_released_at = ?, updated_at = ? WHERE id = (SELECT order_id FROM payouts WHERE id = ?) AND hold_rules IS NOT NULL AND hold_released_at IS NULL`)
+		.bind(Date.now(), Date.now(), id).run();
+	if (res.meta.changes === 0) throw new Conflict('This payout has no hold to release');
+	log('payout.hold_released', { id, admin, note });
+	return (await getPayout(env, id))!;
 }
 
 export async function rejectPayout(env: Env, id: string, reason: string): Promise<PayoutRow> {
@@ -77,12 +94,16 @@ export async function executePayout(env: Env, id: string): Promise<PayoutRow> {
 		const out = await getProvider(env).send({ reference: row.id, amountFcfa: row.amount_fcfa, phone: row.phone, operator: row.operator });
 		if (out.state === 'paid') await transition(env, id, ['sending'], `status = 'paid', paid_at = ?, provider_ref = ?`, Date.now(), out.providerRef);
 		else if (out.state === 'pending') await transition(env, id, ['sending'], `provider_ref = ?`, out.providerRef); // stays 'sending' until the webhook
-		else await transition(env, id, ['sending'], `status = 'failed', error = ?`, out.error);
+		else {
+			await transition(env, id, ['sending'], `status = 'failed', error = ?`, out.error);
+			await alert(env, { level: 'warning', title: 'Payout failed: the provider refused it', details: { payout: id, order: row.order_id, amountFcfa: row.amount_fcfa, error: out.error } });
+		}
 		log('payout.result', { id, state: out.state });
 	} catch (e) {
 		// Unknown outcome: money may have moved. Leave it in 'sending' for a human; do NOT retry automatically.
 		await transition(env, id, ['sending'], `error = ?`, `UNKNOWN OUTCOME: ${e instanceof Error ? e.message : String(e)}`);
 		console.error(JSON.stringify({ msg: 'payout.unknown_outcome', id }));
+		await alert(env, { level: 'critical', title: 'Payout outcome unknown: money may have moved, check the provider', details: { payout: id, order: row.order_id, amountFcfa: row.amount_fcfa } });
 	}
 	return (await getPayout(env, id))!;
 }
@@ -93,5 +114,6 @@ export async function settleFromWebhook(env: Env, reference: string, state: 'pai
 		? await transition(env, reference, ['sending'], `status = 'paid', paid_at = ?`, Date.now())
 		: await transition(env, reference, ['sending'], `status = 'failed', error = ?`, error ?? 'Rejected by provider');
 	log('payout.webhook', { reference, state, applied: ok });
+	if (ok && state === 'failed') await alert(env, { level: 'warning', title: 'Payout failed: the provider reported a failure', details: { payout: reference, error } });
 	return ok;
 }

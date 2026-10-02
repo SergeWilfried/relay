@@ -99,10 +99,78 @@ The app is in **French** (Senegal, Cote d'Ivoire, Burkina Faso) with English kep
 
 ### Transaction limits
 
-`src/lib/limits.ts` defines the limits (placeholders: 5M FCFA per transaction, 10M per day, 50M per month; set them from your compliance policy).
+`src/lib/limits.ts` defines the limits per user: 2M FCFA per day and 10M per month, with the per-transaction cap set equal to the daily limit until you decide on one.
 The Account card shows them with live usage (calendar day / month on the device, from the user's orders; failed orders and drafts don't count, orders waiting for a deposit reserve their amount),
 and the trade form blocks an order that would exceed them ("Exceeds your limit" with the amount left).
-**This is a UX guard only.** The server does not enforce limits yet (it doesn't store KYC status or all of a user's orders for buys/swaps), so enforce them server-side before relying on them for compliance.
+The device copy is a UX guard. The real control is the server rule engine below, which applies the same numbers.
+
+### Server rule engine (`worker/rules.ts`)
+
+Built from the protection matrix. Every new **sell** order (the fiat-out ramp) is evaluated in the Worker before a deposit wallet is created, from the FCFA value priced server-side and the user's history (keyed by Privy user id). Rules are versioned data (`id`, `version`, `mode`, `phase`, `when`, `action`, `user_message`) in `RULES`.
+
+- **Order** (matrix evaluation order): 2 account status (P-06 restricted, P-07 frozen) → 3 hard blocks (R-01 sanctioned country) → 4 limits, adjusted by D-03 (R-02 to R-07) → 5 dynamic holds (D-01, D-02, D-09) → allow and log. Circuit breakers (step 1) are not built.
+- **Hold, don't reject:** only limits, sanctions and frozen accounts are refused (403/422/429). A hold accepts the order, blocks the payout from being approved until the hold ends or an analyst releases it, and tells the user why (`hold.message` on the order; shown on the Status page).
+- **Most restrictive wins:** deny > hold; among holds, "until review" beats a timer and the longest timer wins.
+- **Shadow first:** a rule in `shadow` mode is evaluated and logged (`applied: false`) but never changes the outcome. All D-rules ship in shadow; R and P rules enforce. Promote one at a time without a deploy: `PUT /api/admin/rules/D-02/mode {"mode":"enforce"}` (stored in KV); `GET /api/admin/rules` lists versions and effective modes.
+- **Decision log:** table `decisions` has one row per evaluation: final action, the rules that fired with version, mode and applied, the facts they saw, the user message. (Decision logging can't fail an order: a failed insert is reported in the Worker logs instead.)
+
+| Rule | Does | Mode |
+|---|---|---|
+| P-07 / P-06 | frozen: deny (403) / restricted: hold every payout until review. Set with `POST /api/admin/users/:id/status {status, note}` | enforce |
+| R-01 | sanctioned country `KP IR SY CU` (by IP; deny-only; compliance should confirm the list) | enforce |
+| R-02 to R-05 | minimum 1 000 FCFA; per-transaction 2M; daily 2M; monthly 10M (calendar day/month in UTC, = local time in SN/CI/BF) | enforce |
+| R-06 / R-07 | more than 3 open orders / more than 10 orders in an hour (429) | enforce |
+| D-03 | account younger than 14 days: limits at 50% | shadow |
+| D-01 | request from a different country than the previous one: hold 24 h | shadow |
+| D-02 | payout number differs from numbers used before: hold 48 h (a first number is the baseline) | shadow |
+| D-09 | 3+ requests within 10% of the per-transaction limit in 7 days: hold until review | shadow |
+
+Counted toward limits: orders that aren't underpaid, aren't unpaid and expired, and whose payout wasn't rejected or failed. The daily and monthly checks are repeated inside the INSERT (with the effective limits), so concurrent requests can't both slip under a limit. Retrying an existing order id returns the order without re-evaluating.
+Admin: the payouts page shows holds and a **Release hold** action (a note is required and logged); approving a held payout is refused by the API (409). Run `pnpm db:migrate:local` / `pnpm db:migrate` for migrations 0003 and 0004.
+
+**Not built from the matrix:** the KYC tier table (limits are flat 2M/10M for everyone; `tierLimits()` in `rules.ts` is where tiers plug in once KYC status reaches the server), circuit breakers B-01 to B-07 and the kill switch, and the rules that need fiat-in, devices, payer names, MFA or address-risk data (D-04 to D-08, D-10 to D-12) or Clef (C-01 to C-07). Account age (D-03) counts from a user's first authenticated API call, not their Privy signup. Buys and swaps aren't server orders yet, so none of this covers them.
+
+### Privy policies for deposit wallets
+
+Each sell order gets its own Privy server wallet, restricted by a policy that pins the chain, the asset and a maximum amount, and, when `TREASURY_EVM` / `TREASURY_SOL` are set, the **destination**: the wallet can only send to your treasury.
+
+| Wallet | Allowed | Cap |
+|---|---|---|
+| EVM | USDT or USDC `transfer` on Ethereum mainnet (no ETH attached) | 5 000 per transfer |
+| EVM | ETH transfer on mainnet | 2 ETH |
+| Solana | SOL transfer | 40 SOL |
+| EVM | explicitly denied: `exportPrivateKey`, `personal_sign` (typed-data and EIP-7702 signing fall to Privy's default deny; it rejects an explicit DENY for them without a condition) | |
+
+Privy denies whatever no ALLOW rule matches and a matching DENY always wins, so there is no catch-all DENY. Several ALLOW rules for one method are OR-ed, so every restriction sits inside the ALLOW rule itself (a separate looser ALLOW would override it). Caps are generous multiples of the 2M FCFA order limit so rate drift can't block a legitimate sweep (edit `CAPS`).
+
+```bash
+node scripts/privy-policies.mjs            # dry run: prints the policies, needs nothing
+node scripts/privy-policies.mjs --apply    # creates them in your Privy app (needs PRIVY_APP_ID / PRIVY_APP_SECRET)
+```
+
+Set the printed ids as `PRIVY_DEPOSIT_POLICY_EVM` / `PRIVY_DEPOSIT_POLICY_SOL` (Worker secrets). With `LIVE=true` the Worker refuses to create a deposit wallet without them. Definitions: `scripts/privy-policy-defs.mjs` (unit-tested in `test/policies.test.ts`).
+**User wallets (`--users`):** `node scripts/privy-policies.mjs --users [--apply]` also creates the matrix's policies for users' own wallets: P-03 to P-05 per-transfer caps (50 / 500 / 5 000 USD by tier), P-02 (unlimited approvals denied) and P-07 (frozen: deny all). They are shaped as ALLOW-all plus DENY rules so they can't break swaps. They are **not attached to any wallet yet** (assigning a tier or frozen policy on a status change is a server job needing the wallet owner's authorization). ETH and SOL caps use placeholder reference prices (`REF_USD`); the caps apply to any recipient because there is no allowlist. Not expressible without addresses or dashboard settings: P-01 (contract allowlist: router, ramp contract), P-06 (needs those addresses) and P-08 (MFA is a Privy app setting, not a policy rule).
+
+**Destination lock:** EVM and Solana are locked to the treasuries in `TREASURY_EVM` / `TREASURY_SOL`. Changing a policy creates a new one in Privy (the old one stays until deleted), so update the policy ids afterwards.
+**Limits of this version:** The Solana rules and the calldata match haven't been run against real Privy; test a sweep on a throwaway order first. There is no sweep job yet; for stronger protection give the wallets an owner (authorization key).
+
+### Sweeps: forwarding deposits to the treasury (`worker/sweep.ts`)
+
+A cron trigger (every 5 minutes, `wrangler.jsonc` `triggers`) and `POST /api/admin/sweeps/run` queue a sweep for every order whose deposit is confirmed, then send it from the order's Privy deposit wallet to `TREASURY_EVM` / `TREASURY_SOL`. The wallet policies allow exactly that transfer, so even a bug here can't send elsewhere.
+
+- **One sweep per order** (primary key) and conditional status updates: overlapping runs can't send twice.
+- **Statuses:** `pending → sending → submitted | failed | unknown`. `failed` = Privy definitively refused (policy violation, validation): fix the cause, then `POST /api/admin/sweeps/:orderId/retry`. `unknown` = ambiguous (network error, 5xx): funds may have moved, so it is **never retried automatically**; check the chain, then `POST .../resolve {outcome: submitted|failed, note, txHash}`. A 429 is retried on the next run (up to 3 times).
+- **Ethereum:** native ETH or an ERC-20 `transfer` to the treasury, with **Privy gas sponsorship** (`sponsor: true`), because a deposit wallet holds only the deposit and a token sweep would have no ETH for gas. **Enable gas sponsorship for Ethereum in the Privy dashboard first.**
+- **Solana:** a legacy System Program transfer built in the Worker (a recent blockhash comes from `SOLANA_RPC_URL`; leave it empty for the public endpoint, which is rate-limited, so use a provider URL in production). The wallet pays the 5 000-lamport fee, so the fee is subtracted from the amount sent. The transaction bytes are tested to be identical to `@solana/kit`'s.
+- **Sandbox:** with `LIVE=false` a sweep just records `sandbox-sweep-<order>`; with `LIVE=true` only orders with a real deposit wallet are swept.
+- **List:** `GET /api/admin/sweeps[?status=]`. Run `pnpm db:migrate:local` / `pnpm db:migrate` for migration 0005.
+- **Admin page:** the **Sweeps** tab (`/admin`) groups sweeps into needs attention / in progress / sent, links sent hashes to the explorer, has **Retry** for failed ones and **Resolve** for unknown ones (a note is required), and a "Run sweeps now" button.
+- **Not built:** confirmation tracking (`submitted` means Privy accepted and broadcast it, not that it is final).
+- **Untested against real Privy:** the `/rpc` request shapes follow Privy's docs, the sponsored token transfer must satisfy the policy's `value = 0` check, and the policy `transfer.recipient` match; test one small real order before relying on it.
+
+### Alerts (`worker/alerts.ts`)
+
+Things a person must look at are written to the Worker log (`msg: "alert"`) and, if `ALERT_WEBHOOK_URL` is set (a Slack or Discord incoming-webhook URL, kept as a secret), POSTed there (`text`, `content`, `level`, `title`, `details`). They fire once, on the transition: **critical** for a sweep or payout with an unknown outcome (money may have moved); **warning** for a failed sweep or payout (a payout failure reported by the provider webhook too); **info** when a rule puts a payout on hold. Payloads hold order ids, assets, amounts and rule ids only: no phone numbers or user ids. A failing webhook is logged and never breaks the operation. Not built: email or SMS, escalation, and alerts for payouts waiting a long time for approval.
 
 ### Pools (crypto only)
 

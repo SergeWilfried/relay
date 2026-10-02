@@ -62,6 +62,9 @@ export default function Status() {
 
       <StepList steps={steps} step={step} done={done} failedAt={failed ? step : undefined} />
 
+      {order.server?.hold && (
+        <div className="notice" role="status"><b>{t('Your payout is on hold.')}</b> {tr(order.server.hold)}</div>
+      )}
       {reviewing && (
         <div className="notice" role="status">
           <b>{t('Your payout is being reviewed.')}</b> {t("We've received your {sym}. Your FCFA will be sent to {provider} {phone} as soon as it's approved. You can leave this page.", { sym: order.from.sym, provider: order.provider?.name ?? '', phone: order.phone ?? '' })}

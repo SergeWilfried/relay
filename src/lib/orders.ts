@@ -45,7 +45,7 @@ export interface Order {
   /** sell orders: mobile money number the payout goes to (E.164) */
   phone: string | null;
   /** latest status reported by the server for synced orders (null until the first sync) */
-  server: { status: 'awaiting_deposit' | 'processing' | 'underpaid'; payout: string | null; payoutError: string | null; note: string | null } | null;
+  server: { status: 'awaiting_deposit' | 'processing' | 'underpaid'; payout: string | null; payoutError: string | null; note: string | null; hold?: string | null } | null;
 }
 
 const short = (a: string) => `${a.slice(0, 5)}…${a.slice(-3)}`;

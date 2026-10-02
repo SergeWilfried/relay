@@ -3,11 +3,12 @@ import { deriveProgress, type Order } from './orders';
 import { useApp } from '../state/app';
 
 /**
- * Transaction limits, in FCFA. PLACEHOLDER VALUES: set them from your compliance policy.
+ * Transaction limits per user, in FCFA: 2M per day and 10M per month. The per-transaction cap is not specified yet, so it
+ * equals the daily limit (a single order can't exceed what's allowed in a day); lower it if you want a smaller single-order cap.
  * They are enforced in the app (trade form) and shown on the Account page. The server does not enforce
  * them yet (it doesn't know a user's KYC status), so treat this as a UX guard, not a control.
  */
-export const LIMITS = { perTx: 5_000_000, daily: 10_000_000, monthly: 50_000_000 } as const;
+export const LIMITS = { perTx: 2_000_000, daily: 2_000_000, monthly: 10_000_000 } as const;
 
 export interface Usage { limit: number; used: number; remaining: number; pct: number }
 
