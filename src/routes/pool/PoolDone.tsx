@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
-import { fmtInt } from '../../lib/format';
 import { useT } from '../../i18n';
+import { fmtCrypto } from '../../lib/format';
+import { usePoolParam } from './usePoolParam';
 
 export function Done({ title, sub }: { title: string; sub: string }) {
   const { t } = useT();
@@ -16,6 +17,8 @@ export function Done({ title, sub }: { title: string; sub: string }) {
 
 export default function PoolDone() {
   const { t } = useT();
+  const p = usePoolParam();
   const { state } = useLocation() as { state: { amount?: number } | null };
-  return <Done title={t('Liquidity added')} sub={t('{amount} FCFA · FCFA rail pool', { amount: fmtInt(state?.amount ?? 0) })} />;
+  const amount = p ? fmtCrypto(state?.amount ?? 0, 2, p.asset.dec) : '0';
+  return <Done title={t('Liquidity added')} sub={t('{amount} {sym} · {name} pool', { amount, sym: p?.pool.sym ?? '', name: p?.pool.name ?? '' })} />;
 }

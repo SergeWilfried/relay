@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import { totalTvlMillions } from '../../lib/data';
+import { avgApy, totalTvlMillions, totalVolumeMillions } from '../../lib/data';
 import { lenStep, localizePct } from '../../lib/format';
 import { useT } from '../../i18n';
 
@@ -21,8 +21,8 @@ export function Stats({ empty }: { empty?: boolean }) {
   return (
     <div className="stats">
       <Stat label="Total liquidity" value={v(`${Math.round(totalTvlMillions())}M`)} unit="FCFA" />
-      <Stat label="24h volume" value={v('96M')} unit="FCFA" />
-      <Stat label="Avg APY" value={v(localizePct('9.2%'))} unit="paid in FCFA" acc />
+      <Stat label="24h volume" value={v(`${Math.round(totalVolumeMillions())}M`)} unit="FCFA" />
+      <Stat label="Avg APY" value={v(localizePct(`${avgApy().toFixed(1)}%`))} unit="paid in the pool asset" acc />
     </div>
   );
 }

@@ -2,17 +2,18 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { loadState, saveState } from '../lib/persist';
 import type { Order } from '../lib/orders';
 
-export interface PoolEvent { id: string; type: 'deposit' | 'withdrawal'; amount: number; at: number }
+/** `amount` is in units of the pool's coin (e.g. 1.25 = 1.25 ETH). */
+export interface PoolEvent { id: string; type: 'deposit' | 'withdrawal'; pool: string; amount: number; at: number }
 
 interface AppState {
   /** KYC status — in production comes from the user's profile / verification partner webhook. */
   kyc: 'none' | 'verified';
   setVerified: () => void;
-  /** FCFA currently provided to the rail pool; 0 = not joined. */
-  position: number;
-  setPosition: (n: number) => void;
+  /** coins the user has provided to each pool, by pool id, in that coin's units (missing / 0 = not joined). */
+  positions: Record<string, number>;
+  setPosition: (pool: string, amount: number) => void;
   poolEvents: PoolEvent[];
-  addPoolEvent: (type: PoolEvent['type'], amount: number) => void;
+  addPoolEvent: (type: PoolEvent['type'], pool: string, amount: number) => void;
   /** submitted orders, newest first. Progress is derived from timestamps (see lib/orders). */
   orders: Order[];
   addOrder: (o: Order) => void;
@@ -27,26 +28,33 @@ export const useApp = () => {
   return c;
 };
 
-interface Saved { kyc: 'none' | 'verified'; position: number; poolEvents: PoolEvent[]; orders: Order[] }
+interface Saved { kyc: 'none' | 'verified'; positions: Record<string, number>; poolEvents: PoolEvent[]; orders: Order[] }
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const saved = loadState<Partial<Saved>>('app', {});
   const [kyc, setKyc] = useState<'none' | 'verified'>(saved.kyc ?? 'none');
-  const [position, setPosition] = useState(saved.position ?? 0);
+  // (an older build stored one FCFA `position`; it is dropped: pools are crypto-only now)
+  const [positions, setPositions] = useState<Record<string, number>>(saved.positions ?? {});
   const [poolEvents, setPoolEvents] = useState<PoolEvent[]>(saved.poolEvents ?? []);
   const [orders, setOrders] = useState<Order[]>(saved.orders ?? []);
 
   // everything the user would expect to survive a reload
-  useEffect(() => { saveState('app', { kyc, position, poolEvents, orders } satisfies Saved); }, [kyc, position, poolEvents, orders]);
+  useEffect(() => { saveState('app', { kyc, positions, poolEvents, orders } satisfies Saved); }, [kyc, positions, poolEvents, orders]);
 
-  const addPoolEvent = (type: PoolEvent['type'], amount: number) =>
-    setPoolEvents((l) => [{ id: Date.now().toString(36), type, amount, at: Date.now() }, ...l]);
+  const setPosition = (pool: string, amount: number) =>
+    setPositions((p) => {
+      const next = { ...p, [pool]: Math.max(0, amount) };
+      if (next[pool] === 0) delete next[pool];
+      return next;
+    });
+  const addPoolEvent = (type: PoolEvent['type'], pool: string, amount: number) =>
+    setPoolEvents((l) => [{ id: Date.now().toString(36), type, pool, amount, at: Date.now() }, ...l]);
   const addOrder = (o: Order) => setOrders((l) => [o, ...l.filter((x) => x.id !== o.id)]);
   const updateOrder = (id: string, patch: Partial<Order>) => setOrders((l) => l.map((o) => (o.id === id ? { ...o, ...patch } : o)));
   const removeOrder = (id: string) => setOrders((l) => l.filter((o) => o.id !== id));
 
   return (
-    <Ctx.Provider value={{ kyc, setVerified: () => setKyc('verified'), position, setPosition, poolEvents, addPoolEvent, orders, addOrder, updateOrder, removeOrder }}>
+    <Ctx.Provider value={{ kyc, setVerified: () => setKyc('verified'), positions, setPosition, poolEvents, addPoolEvent, orders, addOrder, updateOrder, removeOrder }}>
       {children}
     </Ctx.Provider>
   );

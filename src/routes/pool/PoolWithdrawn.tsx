@@ -1,10 +1,13 @@
 import { useLocation } from 'react-router-dom';
-import { fmtInt } from '../../lib/format';
 import { useT } from '../../i18n';
+import { fmtCrypto } from '../../lib/format';
 import { Done } from './PoolDone';
+import { usePoolParam } from './usePoolParam';
 
 export default function PoolWithdrawn() {
   const { t } = useT();
+  const p = usePoolParam();
   const { state } = useLocation() as { state: { amount?: number } | null };
-  return <Done title={t('Withdrawal sent')} sub={t('{amount} FCFA → Orange Money · 1–2 min', { amount: fmtInt(state?.amount ?? 0) })} />;
+  const amount = p ? fmtCrypto(state?.amount ?? 0, 2, p.asset.dec) : '0';
+  return <Done title={t('Withdrawal sent')} sub={t('{amount} {sym} → your Relay wallet · 1–2 min', { amount, sym: p?.pool.sym ?? '' })} />;
 }

@@ -15,14 +15,11 @@ import { PhoneSheet, validPhone } from '../../components/PhoneSheet';
 import { useAuth } from '../../auth/AuthContext';
 import { useT } from '../../i18n';
 import { useFcfaAvatar } from '../../lib/geo';
+import { maxSpend } from '../../lib/gas';
 import { useLimits } from '../../lib/limits';
 import { useTrade } from '../../state/trade';
 
 const isTab = (t?: string): t is Tab => t === 'swap' || t === 'buy' || t === 'sell';
-// keep a little native token back so the wallet can still pay network fees
-const GAS_RESERVE: Record<string, number> = { ETH: 0.002, SOL: 0.01 };
-const maxSpend = (sym: string, bal: number) => Math.max(0, bal - (GAS_RESERVE[sym] ?? 0));
-
 const CTA_KEY: Record<Tab, string> = { swap: 'Review swap', buy: 'Review purchase', sell: 'Review cash out' };
 
 export default function TradeForm() {

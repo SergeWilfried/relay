@@ -52,6 +52,8 @@ export const WALLET_SHORT = '0x8f3C…9c21';
 
 export interface Pool {
   id: string;
+  /** the coin deposited into / withdrawn from this pool */
+  sym: string;
   name: string;
   char: string;
   color: string;
@@ -65,15 +67,20 @@ export interface Pool {
 }
 
 export const POOLS: Pool[] = [
-  { id: 'fcfa', name: 'FCFA rail', char: 'F', color: FCFA_COLOR, blurb: '0% fee · TVL 512M', tvl: '512M FCFA', apy: '8.4%', util: 72, feeRate: '0.25%', volume: '96M FCFA' },
-  { id: 'eth', name: 'ETH', char: 'E', color: ETH.color, logo: ETH.logo, blurb: '0.25% fee · TVL 198M', tvl: '198M FCFA', apy: '6.1%', util: 54, feeRate: '0.25%', volume: '31M FCFA' },
-  { id: 'sol', name: 'SOL', char: 'S', color: SOL.color, logo: SOL.logo, blurb: '0% fee · TVL 132M', tvl: '132M FCFA', apy: '7.3%', util: 61, feeRate: '0.25%', volume: '22M FCFA' },
-  { id: 'usdt', name: 'USDT', char: USDT.char, color: USDT.color, logo: USDT.logo, blurb: '0% fee · TVL 74M', tvl: '74M FCFA', apy: '5.2%', util: 48, feeRate: '0.25%', volume: '14M FCFA' },
-  { id: 'usdc', name: 'USDC', char: USDC.char, color: USDC.color, logo: USDC.logo, blurb: '0% fee · TVL 61M', tvl: '61M FCFA', apy: '4.9%', util: 43, feeRate: '0.25%', volume: '11M FCFA' },
+  { id: 'eth', sym: 'ETH', name: 'ETH', char: 'E', color: ETH.color, logo: ETH.logo, blurb: '0.25% fee · TVL 198M', tvl: '198M FCFA', apy: '6.1%', util: 54, feeRate: '0.25%', volume: '31M FCFA' },
+  { id: 'sol', sym: 'SOL', name: 'SOL', char: 'S', color: SOL.color, logo: SOL.logo, blurb: '0% fee · TVL 132M', tvl: '132M FCFA', apy: '7.3%', util: 61, feeRate: '0.25%', volume: '22M FCFA' },
+  { id: 'usdt', sym: 'USDT', name: 'USDT', char: USDT.char, color: USDT.color, logo: USDT.logo, blurb: '0% fee · TVL 74M', tvl: '74M FCFA', apy: '5.2%', util: 48, feeRate: '0.25%', volume: '14M FCFA' },
+  { id: 'usdc', sym: 'USDC', name: 'USDC', char: USDC.char, color: USDC.color, logo: USDC.logo, blurb: '0% fee · TVL 61M', tvl: '61M FCFA', apy: '4.9%', util: 43, feeRate: '0.25%', volume: '11M FCFA' },
 ];
+
+export const poolAsset = (p: Pool): Asset => ASSETS.find((a) => a.sym === p.sym)!;
 
 /** Total value locked across pools, in millions of FCFA (parsed from each pool's `tvl`). */
 export const totalTvlMillions = () => POOLS.reduce((n, p) => n + (parseFloat(p.tvl) || 0), 0);
+/** 24h volume across pools, millions of FCFA. */
+export const totalVolumeMillions = () => POOLS.reduce((n, p) => n + (parseFloat(p.volume) || 0), 0);
+/** Simple average APY across pools, as a percent number. */
+export const avgApy = () => POOLS.reduce((n, p) => n + (parseFloat(p.apy) || 0), 0) / Math.max(1, POOLS.length);
 
 /**
  * Stand-ins for the pool earnings API. Empty until the backend reports payouts,

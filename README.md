@@ -83,7 +83,7 @@ The app asks for the user's own mobile money number on Sell (live mode never pre
 ### Country flag as the FCFA avatar
 
 `GET /api/geo` returns the visitor's country from Cloudflare's IP geolocation (`request.cf.country`, no third-party service, no IP stored).
-For Senegal, Cote d'Ivoire and Burkina Faso the FCFA icon (trade chip, FCFA pool) becomes that country's flag; anywhere else it stays the green "F".
+For Senegal, Cote d'Ivoire and Burkina Faso the FCFA icon on the trade chip becomes that country's flag; anywhere else it stays the green "F".
 The answer is cached on the device for 24h. It is **cosmetic only**: a VPN or roaming changes it, so never use it for KYC, limits or payouts.
 Flags live in `design-assets/country/` (originals) and `public/country/` (square 96px, `pnpm flags`). To add a country: add its flag to `scripts/flags.mjs` and an entry to `SERVED` in `src/lib/geo.ts`.
 Locally Wrangler fills in `request.cf` from your real IP; to pretend: `localStorage['relay-mock-country'] = 'SN'` (dev only).
@@ -103,6 +103,11 @@ The app is in **French** (Senegal, Cote d'Ivoire, Burkina Faso) with English kep
 The Account card shows them with live usage (calendar day / month on the device, from the user's orders; failed orders and drafts don't count, orders waiting for a deposit reserve their amount),
 and the trade form blocks an order that would exceed them ("Exceeds your limit" with the amount left).
 **This is a UX guard only.** The server does not enforce limits yet (it doesn't store KYC status or all of a user's orders for buys/swaps), so enforce them server-side before relying on them for compliance.
+
+### Pools (crypto only)
+
+Pools are crypto-only (ETH, SOL, USDT, USDC); there is no fiat / FCFA pool. A position is an amount of the pool's own coin (stored per pool id), deposits are checked against the user's Relay wallet balance, and values in FCFA are shown as approximations.
+**Pool deposits and withdrawals are still simulated** (state in the app only; nothing moves on-chain or on a server yet). Pool numbers (APY, utilization, volume, TVL) are placeholders in `src/lib/data.ts`.
 
 ### Dev failure switches
 `localStorage['relay-mock-quote' | 'relay-mock-submit' | 'relay-mock-order' | 'relay-mock-pools']` — see `src/lib/mock.ts`.
