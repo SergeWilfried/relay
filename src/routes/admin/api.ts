@@ -85,3 +85,33 @@ export interface Revenue {
   uncountedPaid: number;
 }
 export const getRevenue = (days: number) => call<Revenue>(`/revenue?days=${days}`);
+
+export interface AdminRefund {
+  id: string;
+  order_id: string;
+  user_id: string;
+  asset: string;
+  network: string;
+  amount_units: string;
+  destination: string;
+  reason: string;
+  status: 'requested' | 'approved' | 'sent' | 'cancelled';
+  requested_by: string;
+  approved_by: string | null;
+  tx_hash: string | null;
+  created_at: number;
+  updated_at: number;
+  events: { action: string; by_name: string; note: string | null; created_at: number }[];
+}
+export interface EligibleOrder { orderId: string; asset: string; network: string; reason: string; depositAmountUnits: string; payoutStatus: string | null; payoutError: string | null; suggestedDestination: string | null; createdAt: number }
+
+const NAME_KEY = 'relay-admin-name';
+export const getName = () => { try { return sessionStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; } };
+export const setName = (n: string) => { try { sessionStorage.setItem(NAME_KEY, n); } catch { /* ignore */ } };
+
+export const listRefunds = () => call<{ refunds: AdminRefund[] }>('/refunds').then((r) => r.refunds);
+export const listEligible = () => call<{ orders: EligibleOrder[] }>('/refunds/eligible').then((r) => r.orders);
+export const createRefund = (b: { orderId: string; destination: string; reason: string; by: string; amountUnits?: string }) => call<AdminRefund>('/refunds', 'POST', b);
+export const approveRefund = (id: string, by: string) => call<AdminRefund>(`/refunds/${id}/approve`, 'POST', { by });
+export const markRefundSent = (id: string, by: string, txHash: string) => call<AdminRefund>(`/refunds/${id}/sent`, 'POST', { by, txHash });
+export const cancelRefund = (id: string, by: string, reason: string) => call<AdminRefund>(`/refunds/${id}/cancel`, 'POST', { by, reason });

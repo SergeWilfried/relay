@@ -40,8 +40,15 @@ async function transition(env: Env, id: string, from: PayoutStatus[], set: strin
 	return res.meta.changes > 0;
 }
 
+/** A payout and a refund of the same deposit must never both happen: while a refund is live (not cancelled) the payout stays put. */
+async function assertNoLiveRefund(env: Env, payoutId: string) {
+	const r = await env.DB.prepare(`SELECT r.status FROM payouts p JOIN refunds r ON r.order_id = p.order_id WHERE p.id = ? AND r.status != 'cancelled'`).bind(payoutId).first<{ status: string }>();
+	if (r) throw new Conflict(`This order has a refund (${r.status}): cancel the refund first if the customer should be paid instead`);
+}
+
 export async function approvePayout(env: Env, id: string, admin: string): Promise<PayoutRow> {
 	const now = Date.now();
+	await assertNoLiveRefund(env, id);
 	// a payout on hold can't be approved until the hold runs out or an analyst releases it (see releaseHold)
 	const h = await env.DB.prepare(`SELECT o.hold_rules, o.hold_until, o.hold_released_at FROM payouts p JOIN orders o ON o.id = p.order_id WHERE p.id = ?`)
 		.bind(id).first<{ hold_rules: string | null; hold_until: number | null; hold_released_at: number | null }>();
@@ -68,6 +75,7 @@ export async function rejectPayout(env: Env, id: string, reason: string): Promis
 
 /** Re-send a payout the provider definitively refused. Never valid for 'sending' (outcome unknown: resolve it instead). */
 export async function retryPayout(env: Env, id: string): Promise<PayoutRow> {
+	await assertNoLiveRefund(env, id);
 	if (!(await transition(env, id, ['failed'], `status = 'approved', error = NULL`))) throw new Conflict('Only a failed payout can be retried');
 	return executePayout(env, id);
 }

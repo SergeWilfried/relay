@@ -62,6 +62,17 @@ export default function Status() {
 
       <StepList steps={steps} step={step} done={done} failedAt={failed ? step : undefined} />
 
+      {order.server?.refund && (
+        <div className="notice" role="status">
+          <b>{order.server.refund.status === 'sent' ? t('Your refund was sent.') : t('Your refund is on its way.')}</b>{' '}
+          {order.server.refund.status === 'sent'
+            ? t('We returned your {sym} to your wallet.', { sym: order.from.sym })
+            : t('We are returning your {sym}. You will see the transaction here once it is sent.', { sym: order.from.sym })}
+          {order.server.refund.status === 'sent' && order.server.refund.txHash && (
+            <div><a className="notice-act" href={order.from.explorer + order.server.refund.txHash} target="_blank" rel="noreferrer">{t('View the refund transaction')}</a></div>
+          )}
+        </div>
+      )}
       {order.server?.hold && (
         <div className="notice" role="status"><b>{t('Your payout is on hold.')}</b> {tr(order.server.hold)}</div>
       )}

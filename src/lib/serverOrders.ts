@@ -23,6 +23,8 @@ export interface ServerOrder {
   note: string | null;
   /** set while a rule holds the payout for review */
   hold: { message: string; until: number | null } | null;
+  /** a crypto refund of this order's deposit; null when there is none */
+  refund: { status: 'requested' | 'approved' | 'sent'; txHash: string | null } | null;
 }
 
 /** 1.5 -> "1.5", 0.000123 -> "0.000123" (never exponent notation, which the server rejects). */
@@ -59,8 +61,8 @@ export async function listServerOrders(): Promise<ServerOrder[]> {
 
 /** The patch to apply to a local order so it mirrors the server's view; null when nothing changed. */
 export function patchFromServer(o: Order, s: ServerOrder): Partial<Order> | null {
-  const server: NonNullable<Order['server']> = { status: s.status, payout: s.payout?.status ?? null, payoutError: s.payout?.error ?? null, note: s.note, hold: s.hold?.message ?? null };
-  const same = o.server && o.server.status === server.status && o.server.payout === server.payout && o.server.payoutError === server.payoutError && o.server.note === server.note && (o.server.hold ?? null) === server.hold;
+  const server: NonNullable<Order['server']> = { status: s.status, payout: s.payout?.status ?? null, payoutError: s.payout?.error ?? null, note: s.note, hold: s.hold?.message ?? null, refund: s.refund ?? null };
+  const same = o.server && o.server.status === server.status && o.server.payout === server.payout && o.server.payoutError === server.payoutError && o.server.note === server.note && (o.server.hold ?? null) === server.hold && (o.server.refund?.status ?? null) === (server.refund?.status ?? null) && (o.server.refund?.txHash ?? null) === (server.refund?.txHash ?? null);
   const patch: Partial<Order> = same ? {} : { server };
   if (s.status === 'processing' && o.awaitingDeposit) Object.assign(patch, { awaitingDeposit: false, startedAt: s.startedAt ?? Date.now(), depositTx: s.depositTx ?? o.depositTx });
   return Object.keys(patch).length ? patch : null;

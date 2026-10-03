@@ -1,5 +1,6 @@
 import { AuthError, authenticate } from './auth';
 import { BadRequest, createSellOrder, getOrder, listOrders } from './orders';
+import { approveRefund, cancelRefund, checkStaleRefunds, createRefund, listEligible, listRefunds, markRefundSent, RefundError } from './refunds';
 import { FLOAT_FLOOR_XOF, checkFloat, reconcilePayouts, approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
 import { getProvider } from './payout';
 import { ensureProfile, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
@@ -123,6 +124,21 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 		const r = await removeEntry(env, Number(lm[1]), 'admin');
 		return r.removed ? json(r) : json({ error: r.sync && !r.sync.synced ? `Could not remove it from Privy: ${r.sync.reason}. Nothing was changed.` : 'Not found' }, r.sync ? 502 : 404);
 	}
+	if (pathname === '/api/admin/refunds' && request.method === 'GET') return json({ refunds: await listRefunds(env, url.searchParams.get('status') ?? undefined) });
+	if (pathname === '/api/admin/refunds/eligible' && request.method === 'GET') return json({ orders: await listEligible(env) });
+	if (pathname === '/api/admin/refunds' && request.method === 'POST') {
+		const body = await request.json().catch(() => ({}));
+		try { return json(await createRefund(env, body as never), 201); } catch (e) { if (e instanceof RefundError) return json({ error: e.message }, e.status as 400 | 404 | 409); throw e; }
+	}
+	const rf = /^\/api\/admin\/refunds\/(rf[a-z0-9]{6,32})\/(approve|sent|cancel)$/.exec(pathname);
+	if (rf && request.method === 'POST') {
+		const body = (await request.json().catch(() => ({}))) as { by?: unknown; txHash?: unknown; reason?: unknown };
+		try {
+			if (rf[2] === 'approve') return json(await approveRefund(env, rf[1]!, body.by));
+			if (rf[2] === 'sent') return json(await markRefundSent(env, rf[1]!, body.by, body.txHash));
+			return json(await cancelRefund(env, rf[1]!, body.by, body.reason));
+		} catch (e) { if (e instanceof RefundError) return json({ error: e.message }, e.status as 400 | 404 | 409); throw e; }
+	}
 	if (pathname === '/api/admin/revenue' && request.method === 'GET') {
 		const days = Number(url.searchParams.get('days') ?? 30);
 		if (![0, 7, 30, 90, 365].includes(days)) return json({ error: 'days must be 0 (all), 7, 30, 90 or 365' }, 400);
@@ -234,6 +250,7 @@ export default {
 		// the daily cron is Clef's activity review (C-04); the 5-minute cron is sweeps
 		if (event.cron === DAILY_CRON) { ctx.waitUntil(runPatternReview(env).then((r) => console.log(JSON.stringify({ msg: 'clef.review', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'clef.review_failed', error: e instanceof Error ? e.message : String(e) })))); return; }
 		ctx.waitUntil(reconcilePayouts(env).then((r) => console.log(JSON.stringify({ msg: 'payout.reconcile', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'payout.reconcile_failed', error: e instanceof Error ? e.message : String(e) }))));
+		ctx.waitUntil(checkStaleRefunds(env).catch((e) => console.error(JSON.stringify({ msg: 'refund.stale_check_failed', error: e instanceof Error ? e.message : String(e) }))));
 		ctx.waitUntil(checkFloat(env).catch((e) => console.error(JSON.stringify({ msg: 'payout.float_check_failed', error: e instanceof Error ? e.message : String(e) }))));
 		ctx.waitUntil(runSweeps(env).then((r) => console.log(JSON.stringify({ msg: 'sweep.run', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'sweep.run_failed', error: e instanceof Error ? e.message : String(e) }))));
 	},

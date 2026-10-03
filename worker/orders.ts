@@ -18,6 +18,8 @@ interface OrderRow {
 	hold_rules: string | null; hold_message: string | null; hold_until: number | null; hold_released_at: number | null;
 	// joined from payouts
 	p_status: string | null; p_amount: number | null; p_error: string | null; p_paid_at: number | null;
+	// joined from refunds
+	r_status: string | null; r_tx: string | null;
 }
 
 /** What the client sees. */
@@ -27,6 +29,8 @@ export interface OrderView {
 	startedAt: number | null; depositTx: string | null; note: string | null; payout: PayoutView | null;
 	/** set while the payout is held for review; the client shows the message */
 	hold: { message: string; until: number | null } | null;
+	/** a crypto refund of this order's deposit (the customer sees its progress); null when there is none or it was cancelled */
+	refund: { status: string; txHash: string | null } | null;
 }
 
 const mask = (p: string | null) => (p ? `${p.slice(0, 4)} ·· ${p.slice(-2)}` : null);
@@ -40,11 +44,12 @@ const view = (r: OrderRow): OrderView => ({
 	depositAddress: r.deposit_address, depositLive: r.deposit_live === 1, expiresAt: r.expires_at,
 	startedAt: r.started_at, depositTx: r.deposit_tx, note: r.note,
 	hold: holdActive(r) ? { message: r.hold_message ?? '', until: r.hold_until } : null,
+	refund: r.r_status && r.r_status !== 'cancelled' ? { status: r.r_status, txHash: r.r_status === 'sent' ? r.r_tx : null } : null,
 	payout: r.p_status ? { status: r.p_status, amountFcfa: r.p_amount ?? 0, phoneMasked: mask(r.phone), paidAt: r.p_paid_at, error: r.p_error } : null,
 });
 
-const SELECT_ORDER = `SELECT o.*, p.status AS p_status, p.amount_fcfa AS p_amount, p.error AS p_error, p.paid_at AS p_paid_at
-	FROM orders o LEFT JOIN payouts p ON p.order_id = o.id`;
+const SELECT_ORDER = `SELECT o.*, p.status AS p_status, p.amount_fcfa AS p_amount, p.error AS p_error, p.paid_at AS p_paid_at, r.status AS r_status, r.tx_hash AS r_tx
+	FROM orders o LEFT JOIN payouts p ON p.order_id = o.id LEFT JOIN refunds r ON r.order_id = o.id`;
 
 const DEPOSIT_WINDOW_MS = 15 * 60_000;
 const MAX_AMOUNT = 1_000_000;

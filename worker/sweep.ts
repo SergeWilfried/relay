@@ -1,4 +1,5 @@
 import { notify } from './notify';
+import { ENQUEUE_SWEEPS_SQL } from './sweepSql';
 import { SELL_ASSETS } from './assets';
 import { classifyResponse, erc20TransferData, SOL_FEE_LAMPORTS, solanaTransferTx, toHex, type Sent } from './sweepTx';
 
@@ -39,14 +40,9 @@ export const listSweeps = async (env: Env, status?: string) =>
 /** Queues a sweep for every confirmed deposit that doesn't have one yet. */
 export async function enqueueSweeps(env: Env): Promise<number> {
 	const now = Date.now();
-	const res = await env.DB.prepare(
-		`INSERT OR IGNORE INTO sweeps (order_id, wallet_id, chain, asset, amount_units, status, created_at, updated_at)
-		 SELECT o.id, o.deposit_wallet_id, CASE o.network WHEN 'Solana' THEN 'solana' ELSE 'ethereum' END, o.asset, o.deposit_amount_units, 'pending', ?1, ?1
-		 FROM orders o
-		 WHERE o.tab = 'sell' AND o.status = 'processing' AND o.deposit_amount_units IS NOT NULL
-		   AND (?2 = 0 OR (o.deposit_live = 1 AND o.deposit_wallet_id IS NOT NULL))
-		   AND NOT (o.hold_rules LIKE '%"A-01"%' AND o.hold_released_at IS NULL)`, // funds from a denylisted address are not forwarded to the treasury until an analyst releases the hold // real wallets only when LIVE; sandbox orders only otherwise
-	).bind(now, live(env) ? 1 : 0).run();
+	// An underpaid deposit is only forwarded to the treasury once a refund of it is APPROVED: the treasury is where the refund is sent from.
+	const res = await env.DB.prepare(ENQUEUE_SWEEPS_SQL)
+		.bind(now, live(env) ? 1 : 0).run();
 	return res.meta.changes;
 }
 
