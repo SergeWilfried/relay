@@ -111,8 +111,8 @@ button.chip { cursor: pointer; }
 
 .field { background: var(--rw); border-radius: 12px; padding: 11px 16px; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .field-l { font-weight: 500; font-size: 11.5px; color: var(--mut); }
-.field-v { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; margin-top: 3px; }
-.field-h { font-weight: 600; font-size: 11.5px; color: var(--mut); }
+.field-v { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+.field-h { font-weight: 600; font-size: 11.5px; color: var(--mut); flex: none; white-space: nowrap; } /* the hint never wraps or shrinks: a long label wraps instead */
 
 .agree { margin: 18px 0 10px; text-align: center; font-size: 12px; color: var(--mut); }
 .note { margin-top: 10px; text-align: center; font-size: 12px; color: var(--mut); }
