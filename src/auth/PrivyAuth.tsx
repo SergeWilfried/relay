@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PrivyProvider, useCreateWallet, usePrivy, useSendTransaction, useSigners, useUser } from '@privy-io/react-auth';
 import { useCreateWallet as useCreateSolanaWallet, useSignAndSendTransaction, useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import { buildSolTransfer, signatureToString } from '../lib/solanaTransfer';
@@ -70,7 +70,9 @@ function Bridge({ children }: { children: ReactNode }) {
   // forget per-user attempts on sign-out so the next login provisions again
   useEffect(() => { if (!authenticated) { attempted.current.clear(); setErrors({}); } }, [authenticated]);
 
-  useEffect(() => { setTokenGetter(authenticated ? getAccessToken : null); }, [authenticated, getAccessToken]);
+  // A layout effect, not useEffect: React runs a child's effects before its parent's, so with useEffect the app's first requests
+  // (limits, KYC status, quotes) left before this ran and got a 401. Layout effects all run before any passive effect.
+  useLayoutEffect(() => { setTokenGetter(authenticated ? getAccessToken : null); }, [authenticated, getAccessToken]);
 
   const missing = authenticated && (needEth || needSol);
   const hasErrors = Object.keys(errors).length > 0;

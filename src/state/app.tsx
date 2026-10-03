@@ -5,6 +5,8 @@ import { fetchServerLimits, type ServerLimits } from '../lib/limitsLive';
 import { loadState, saveState } from '../lib/persist';
 import type { Order } from '../lib/orders';
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /** `amount` is in units of the pool's coin (e.g. 1.25 = 1.25 ETH). */
 export interface PoolEvent { id: string; type: 'deposit' | 'withdrawal'; pool: string; amount: number; at: number }
 
@@ -49,7 +51,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live) return null;
     try { const k = await fetchKycStatus(); setKycInfo(k); return k; } catch { return null; }
   }, [live]);
-  useEffect(() => { void refreshKyc(); }, [refreshKyc]);
+  // first load: retry a few times, so one early failure (a request racing the sign-in, a flaky network) can't leave a verified user shown as unverified
+  useEffect(() => {
+    if (!live) return;
+    let cancelled = false;
+    void (async () => { for (let i = 0; i < 4 && !cancelled; i++) { if (await refreshKyc()) return; await sleep(1500 * (i + 1)); } })();
+    return () => { cancelled = true; };
+  }, [live, refreshKyc]);
   // live: only the server can say a user is verified (the saved flag is ignored)
   const kyc: 'none' | 'verified' = live ? (kycInfo?.approved ? 'verified' : 'none') : localKyc;
   // (an older build stored one FCFA `position`; it is dropped: pools are crypto-only now)
@@ -62,7 +70,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!live) return;
     let cancelled = false;
-    fetchServerLimits().then((l) => { if (!cancelled) setServerLimits(l); }).catch(() => { /* keeps the last numbers, or the local fallback */ });
+    void (async () => {
+      for (let i = 0; i < 4 && !cancelled; i++) {
+        try { const l = await fetchServerLimits(); if (!cancelled) setServerLimits(l); return; }
+        catch { await sleep(1500 * (i + 1)); } // keeps the last numbers, or the local fallback, meanwhile
+      }
+    })();
     return () => { cancelled = true; };
   }, [live, ordersKey, kyc]);
 
