@@ -264,7 +264,7 @@ export const app: Record<string, string> = {
 
   // crypto-only pools
   'Earn on your crypto': 'Faites fructifier vos cryptos',
-  'Lend your crypto to the pools that power instant swaps and cash-outs. Fees from every transaction flow to liquidity providers — withdraw anytime.': 'Prêtez vos cryptos aux pools qui alimentent les swaps et les ventes instantanés. Les frais de chaque transaction reviennent aux fournisseurs de liquidité — retirez quand vous voulez.',
+  'Lend your crypto to the pools that power instant swaps and cash-outs. Fees from every transaction flow to liquidity providers — withdraw anytime.': 'Prêtez vos cryptos aux pools qui alimentent les swaps et les ventes instantanés.',
   'Up to {apy} APY · paid daily': 'Jusqu’à {apy} APY · versé chaque jour',
   'Your positions': 'Vos positions',
   'FCFA · across {n} pools': 'FCFA · sur {n} pools',
