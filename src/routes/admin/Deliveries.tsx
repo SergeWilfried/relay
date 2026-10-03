@@ -28,13 +28,11 @@ type Action = { kind: 'deliver' | 'release'; b: AdminBuy };
 function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () => void; onDone: () => void }) {
   const { b, kind } = action;
   const { run, busy, error } = useSubmit();
-  const [name, setName] = useState(api.getName());
   const [text, setText] = useState('');
-  const ready = name.trim().length >= 2 && text.trim().length >= 3;
+  const ready = text.trim().length >= 3;
   const submit = () => run(async () => {
-    api.setName(name.trim());
-    if (kind === 'deliver') await api.markDelivered(b.id, name.trim(), text.trim());
-    else await api.releaseBuyHold(b.id, name.trim(), text.trim());
+    if (kind === 'deliver') await api.markDelivered(b.id, text.trim());
+    else await api.releaseBuyHold(b.id, text.trim());
     onDone();
   });
   return (
@@ -47,7 +45,6 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
       {kind === 'deliver'
         ? <div className="note" style={{ textAlign: 'left' }}>The customer's payment was confirmed. Send {crypto(b)} from the treasury to the address above, then paste the transaction hash. Relay has no treasury key, so it can't send it for you.</div>
         : <div className="note" style={{ textAlign: 'left' }}>Held by {JSON.parse(b.hold_rules ?? '[]').join(', ')}. The customer was told: “{b.hold_message}” Only release it after checking them.</div>}
-      <input className="login-in" style={{ marginTop: 10 }} placeholder="Your name (kept in the audit log)" aria-label="Your name" value={name} onChange={(e) => setName(e.target.value)} />
       <input className={`login-in${kind === 'deliver' ? ' mono' : ''}`} style={{ marginTop: 8 }} placeholder={kind === 'deliver' ? 'Transaction hash' : 'What you checked (kept in the log)'} aria-label={kind === 'deliver' ? 'Transaction hash' : 'Note'} value={text} onChange={(e) => setText(e.target.value)} />
       <ErrorNote>{error}</ErrorNote>
       <ActionButton style={{ marginTop: 14 }} className="btn acc" busy={busy} busyLabel="Working…" disabled={!ready} onClick={submit}>{kind === 'deliver' ? 'Record as delivered' : 'Release hold'}</ActionButton>

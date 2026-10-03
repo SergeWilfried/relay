@@ -1,4 +1,5 @@
 import { notify } from './notify';
+import { twoPerson } from './adminAuth';
 import { holdActive } from './orders';
 import { floatReport, type BuyFlow, type FloatRow, type PayoutFlow } from './float';
 import { getProvider } from './payout';
@@ -9,6 +10,8 @@ export interface PayoutRow {
 	id: string; order_id: string; user_id: string; provider: string; phone: string | null; operator: string | null;
 	amount_fcfa: number; status: PayoutStatus; provider_ref: string | null; attempts: number; error: string | null;
 	approved_at: number | null; paid_at: number | null; created_at: number; updated_at: number;
+	/** two-person approval: the first person's name (null until given), when, and who gave the approval that released it */
+	first_approver: string | null; first_approved_at: number | null; approved_by: string | null; rejected_by: string | null;
 }
 
 /** Payout plus the order context an approver needs to see. */
@@ -46,15 +49,31 @@ async function assertNoLiveRefund(env: Env, payoutId: string) {
 	if (r) throw new Conflict(`This order has a refund (${r.status}): cancel the refund first if the customer should be paid instead`);
 }
 
-export async function approvePayout(env: Env, id: string, admin: string): Promise<PayoutRow> {
+/**
+ * Approves a payout. From `minFcfa` up (0 = every payout) it takes TWO different people: the first approval is recorded and the payout
+ * stays pending; a second person's approval releases it. Below the threshold one person is enough. `admin` is the authenticated
+ * person (never a name typed into a form).
+ */
+export async function approvePayout(env: Env, id: string, admin: string, minFcfa = 0, retry = true): Promise<PayoutRow> {
 	const now = Date.now();
 	await assertNoLiveRefund(env, id);
 	// a payout on hold can't be approved until the hold runs out or an analyst releases it (see releaseHold)
 	const h = await env.DB.prepare(`SELECT o.hold_rules, o.hold_until, o.hold_released_at FROM payouts p JOIN orders o ON o.id = p.order_id WHERE p.id = ?`)
 		.bind(id).first<{ hold_rules: string | null; hold_until: number | null; hold_released_at: number | null }>();
 	if (h && holdActive(h, now)) throw new Conflict(`Payout is on hold (${h.hold_rules}). Release the hold first.`);
-	if (!(await transition(env, id, ['pending_approval'], `status = 'approved', approved_at = ?, error = NULL`, now))) throw new Conflict('Payout is not awaiting approval');
-	log('payout.approved', { id, admin });
+	const p = await getPayout(env, id);
+	if (!p || p.status !== 'pending_approval') throw new Conflict('Payout is not awaiting approval');
+	const step = twoPerson({ amountFcfa: p.amount_fcfa, minFcfa, firstApprover: p.first_approver, approver: admin });
+	if (step === 'same_person') throw new Conflict('A second person must approve this payout: you already gave the first approval');
+	if (step === 'first') {
+		const r = await env.DB.prepare(`UPDATE payouts SET first_approver = ?, first_approved_at = ?, updated_at = ? WHERE id = ? AND status = 'pending_approval' AND first_approver IS NULL`).bind(admin, now, now, id).run();
+		// two people raced to give the first approval: the loser is now the second approver (or the same person, which is refused)
+		if (r.meta.changes === 0) { if (retry) return approvePayout(env, id, admin, minFcfa, false); throw new Conflict('Payout is not awaiting approval'); }
+		log('payout.first_approval', { id, admin, amountFcfa: p.amount_fcfa });
+		return (await getPayout(env, id))!;
+	}
+	if (!(await transition(env, id, ['pending_approval'], `status = 'approved', approved_at = ?, approved_by = ?, error = NULL`, now, admin))) throw new Conflict('Payout is not awaiting approval');
+	log('payout.approved', { id, admin, firstApprover: p.first_approver });
 	return executePayout(env, id);
 }
 
@@ -67,9 +86,9 @@ export async function releaseHold(env: Env, id: string, admin: string, note: str
 	return (await getPayout(env, id))!;
 }
 
-export async function rejectPayout(env: Env, id: string, reason: string): Promise<PayoutRow> {
-	if (!(await transition(env, id, ['pending_approval'], `status = 'rejected', error = ?`, reason))) throw new Conflict('Payout is not awaiting approval');
-	log('payout.rejected', { id, reason });
+export async function rejectPayout(env: Env, id: string, reason: string, admin = 'unknown'): Promise<PayoutRow> {
+	if (!(await transition(env, id, ['pending_approval'], `status = 'rejected', error = ?, rejected_by = ?`, reason, admin))) throw new Conflict('Payout is not awaiting approval');
+	log('payout.rejected', { id, reason, admin });
 	return (await getPayout(env, id))!;
 }
 

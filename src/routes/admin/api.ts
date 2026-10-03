@@ -23,6 +23,11 @@ export interface AdminPayout {
   hold_message: string | null;
   hold_until: number | null;
   hold_released_at: number | null;
+  /** two-person approval: who gave the first approval (the payout stays pending until a different person gives the second) */
+  first_approver: string | null;
+  first_approved_at: number | null;
+  approved_by: string | null;
+  rejected_by: string | null;
 }
 
 const KEY = 'relay-admin-key';
@@ -106,16 +111,13 @@ export interface AdminRefund {
 }
 export interface EligibleOrder { orderId: string; asset: string; network: string; reason: string; depositAmountUnits: string; payoutStatus: string | null; payoutError: string | null; suggestedDestination: string | null; createdAt: number }
 
-const NAME_KEY = 'relay-admin-name';
-export const getName = () => { try { return sessionStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; } };
-export const setName = (n: string) => { try { sessionStorage.setItem(NAME_KEY, n); } catch { /* ignore */ } };
 
 export const listRefunds = () => call<{ refunds: AdminRefund[] }>('/refunds').then((r) => r.refunds);
 export const listEligible = () => call<{ orders: EligibleOrder[] }>('/refunds/eligible').then((r) => r.orders);
-export const createRefund = (b: { orderId: string; destination: string; reason: string; by: string; amountUnits?: string }) => call<AdminRefund>('/refunds', 'POST', b);
-export const approveRefund = (id: string, by: string) => call<AdminRefund>(`/refunds/${id}/approve`, 'POST', { by });
-export const markRefundSent = (id: string, by: string, txHash: string) => call<AdminRefund>(`/refunds/${id}/sent`, 'POST', { by, txHash });
-export const cancelRefund = (id: string, by: string, reason: string) => call<AdminRefund>(`/refunds/${id}/cancel`, 'POST', { by, reason });
+export const createRefund = (b: { orderId: string; destination: string; reason: string; amountUnits?: string }) => call<AdminRefund>('/refunds', 'POST', b);
+export const approveRefund = (id: string) => call<AdminRefund>(`/refunds/${id}/approve`, 'POST');
+export const markRefundSent = (id: string, txHash: string) => call<AdminRefund>(`/refunds/${id}/sent`, 'POST', { txHash });
+export const cancelRefund = (id: string, reason: string) => call<AdminRefund>(`/refunds/${id}/cancel`, 'POST', { reason });
 
 export interface AdminBuy {
   id: string;
@@ -142,8 +144,8 @@ export interface AdminBuy {
   events: { action: string; by_name: string; note: string | null; created_at: number }[];
 }
 export const listBuys = () => call<{ buys: AdminBuy[] }>('/buys').then((r) => r.buys);
-export const markDelivered = (id: string, by: string, txHash: string) => call<AdminBuy>(`/buys/${id}/delivered`, 'POST', { by, txHash });
-export const releaseBuyHold = (id: string, by: string, note: string) => call<AdminBuy>(`/buys/${id}/release-hold`, 'POST', { by, note });
+export const markDelivered = (id: string, txHash: string) => call<AdminBuy>(`/buys/${id}/delivered`, 'POST', { txHash });
+export const releaseBuyHold = (id: string, note: string) => call<AdminBuy>(`/buys/${id}/release-hold`, 'POST', { note });
 
 export interface FloatRow {
   country: string;
@@ -170,3 +172,21 @@ export interface AdminKyc {
 }
 export const listKyc = () => call<{ kyc: AdminKyc[] }>('/kyc').then((r) => r.kyc);
 export const syncKycUser = (userId: string) => call<{ status: string }>(`/kyc/${encodeURIComponent(userId)}/sync`, 'POST');
+
+/** Who is signed in. `root` (the shared key) only manages the team. */
+export interface Me { name: string; role: 'viewer' | 'operator' | 'owner' | 'root'; fourEyesMinFcfa: number }
+export const me = () => call<Me>('/me');
+export const canOperate = (m: Me | null) => m?.role === 'operator' || m?.role === 'owner';
+export const canManage = (m: Me | null) => m?.role === 'owner' || m?.role === 'root';
+
+export interface AdminUser { id: string; name: string; role: 'viewer' | 'operator' | 'owner'; active: number; created_by: string; created_at: number; last_used_at: number | null; disabled_at: number | null; disabled_by: string | null }
+export const listAdmins = () => call<{ admins: AdminUser[] }>('/admins').then((r) => r.admins);
+/** The key comes back once: show it and never store it. */
+export const createAdmin = (name: string, role: AdminUser['role']) => call<{ admin: AdminUser; key: string }>('/admins', 'POST', { name, role });
+export const rotateAdminKey = (id: string) => call<{ admin: AdminUser; key: string }>(`/admins/${id}/rotate-key`, 'POST');
+export const setAdminActive = (id: string, active: boolean) => call<{ admin: AdminUser }>(`/admins/${id}/${active ? 'enable' : 'disable'}`, 'POST');
+export const setAdminRole = (id: string, role: AdminUser['role']) => call<{ admin: AdminUser }>(`/admins/${id}/role`, 'POST', { role });
+
+export interface AuditRow { id: number; at: number; actor: string; role: string; method: string; path: string; action: string; target: string | null; status: number; ip: string | null; details: string | null }
+export const listAudit = (opts: { actor?: string; before?: number } = {}) =>
+  call<{ audit: AuditRow[] }>(`/audit?limit=100${opts.actor ? `&actor=${encodeURIComponent(opts.actor)}` : ''}${opts.before ? `&before=${opts.before}` : ''}`).then((r) => r.audit);

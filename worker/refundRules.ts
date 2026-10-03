@@ -25,7 +25,7 @@ export function checkRefundable(o: Refundable): { ok: true } | { ok: false; reas
 
 const TX_EVM = /^0x[0-9a-fA-F]{64}$/;
 const TX_SOL = /^[1-9A-HJ-NP-Za-km-z]{80,90}$/;
-const NAME = /^[\p{L}][\p{L}\p{N} ._'-]{1,39}$/u;
+const NAME = /^[\p{L}][\p{L}\p{N} ._'@+-]{1,59}$/u; // also admin names (worker/adminAuth.ts: lowercase handles or emails)
 
 
 export const validTxHash = (network: string, h: unknown): h is string => typeof h === 'string' && (network === 'Solana' ? TX_SOL : TX_EVM).test(h);

@@ -16,26 +16,23 @@ const explorer = (r: AdminRefund) => (r.tx_hash ? (r.network === 'Solana' ? `htt
 
 type Action = { kind: 'start'; o: EligibleOrder } | { kind: 'approve' | 'sent' | 'cancel'; r: AdminRefund };
 
-/** One sheet for every step. Each asks for the analyst's name: it goes in the audit log (and the approver must differ from the requester). */
+/** One sheet for every step. The actor is the signed-in person (their key), recorded in the audit log; the approver must differ from the requester. */
 function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () => void; onDone: () => void }) {
   const { run, busy, error } = useSubmit();
-  const [name, setName] = useState(api.getName());
   const [text, setText] = useState(action.kind === 'start' ? (action.o.suggestedDestination ?? '') : '');
   const [reason, setReason] = useState('');
   const title = { start: 'Start a refund', approve: 'Approve refund', sent: 'Record refund sent', cancel: 'Cancel refund' }[action.kind];
   const needsReason = action.kind === 'start' || action.kind === 'cancel';
-  const nameOk = name.trim().length >= 2;
-  const ready = nameOk && (action.kind === 'approve'
+  const ready = (action.kind === 'approve'
     || (action.kind === 'start' && text.trim().length >= 3 && reason.trim().length >= 5)
     || (action.kind === 'sent' && text.trim().length >= 3)
     || (action.kind === 'cancel' && reason.trim().length >= 3));
 
   const submit = () => run(async () => {
-    api.setName(name.trim());
-    if (action.kind === 'start') await api.createRefund({ orderId: action.o.orderId, destination: text.trim(), reason: reason.trim(), by: name.trim() });
-    else if (action.kind === 'approve') await api.approveRefund(action.r.id, name.trim());
-    else if (action.kind === 'sent') await api.markRefundSent(action.r.id, name.trim(), text.trim());
-    else await api.cancelRefund(action.r.id, name.trim(), reason.trim());
+    if (action.kind === 'start') await api.createRefund({ orderId: action.o.orderId, destination: text.trim(), reason: reason.trim() });
+    else if (action.kind === 'approve') await api.approveRefund(action.r.id);
+    else if (action.kind === 'sent') await api.markRefundSent(action.r.id, text.trim());
+    else await api.cancelRefund(action.r.id, reason.trim());
     onDone();
   });
 
@@ -50,7 +47,6 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
       {action.kind === 'start' && <div className="note" style={{ textAlign: 'left' }}>Relay holds no treasury key: after a second person approves, you send this from the treasury and record the transaction here. The customer sees the refund on their order.</div>}
       {action.kind === 'approve' && <div className="note" style={{ textAlign: 'left' }}>Check the destination and the amount. You must be a different person from {action.r.requested_by}, who requested it.</div>}
       {action.kind === 'sent' && <div className="note" style={{ textAlign: 'left' }}>Send {amountOf(action.r.asset, action.r.amount_units)} from the treasury to the address above, then paste the transaction hash.</div>}
-      <input className="login-in" style={{ marginTop: 10 }} placeholder="Your name (kept in the audit log)" aria-label="Your name" value={name} onChange={(e) => setName(e.target.value)} />
       {action.kind === 'start' && <input className="login-in mono" style={{ marginTop: 8 }} placeholder="Refund to this address" aria-label="Destination address" value={text} onChange={(e) => setText(e.target.value)} />}
       {action.kind === 'sent' && <input className="login-in mono" style={{ marginTop: 8 }} placeholder="Transaction hash" aria-label="Transaction hash" value={text} onChange={(e) => setText(e.target.value)} />}
       {needsReason && <input className="login-in" style={{ marginTop: 8 }} placeholder={action.kind === 'start' ? 'Why is this being refunded?' : 'Why is it cancelled?'} aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />}

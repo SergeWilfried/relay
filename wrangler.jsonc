@@ -35,6 +35,8 @@
             "PRIVY_API_URL": "https://api.privy.io",
             // Sumsub level for the identity check (ID document + liveness). Secrets: SUMSUB_TOKEN, SUMSUB_SECRET, SUMSUB_WEBHOOK_SECRET
             "SUMSUB_LEVEL": "id-and-liveness",
+            // Payouts of at least this many FCFA need two different approvers (0 = every payout). See worker/adminAuth.ts.
+            "FOUR_EYES_MIN_FCFA": "500000",
             // JSON-RPC endpoint used to fetch a blockhash for Solana sweeps (empty = the public mainnet-beta endpoint, which is rate-limited: use a provider URL in production)
             "SOLANA_RPC_URL": "",
             // "true" turns Clef on (alert triage C-05 and the daily review C-04). Both start in shadow mode: see README.

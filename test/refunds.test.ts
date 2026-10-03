@@ -44,7 +44,7 @@ test('transaction hashes are checked per chain', () => {
   assert.equal(validTxHash('Ethereum', 42), false);
 });
 
-test('analyst names: 2 to 40 characters, starting with a letter', () => {
-  for (const ok of ['Serge', 'Aïcha Diop', "N'Golo", 'amy.k']) assert.equal(validName(ok), true, ok);
-  for (const bad of ['', 'A', '1abc', ' ', 'x'.repeat(41), null, 5]) assert.equal(validName(bad), false, String(bad));
+test('analyst names: 2 to 60 characters (admin names are emails or handles), starting with a letter', () => {
+  for (const ok of ['Serge', 'Aïcha Diop', "N'Golo", 'amy.k', 'amy.k@relay.io']) assert.equal(validName(ok), true, ok);
+  for (const bad of ['', 'A', '1abc', ' ', 'x'.repeat(61), null, 5]) assert.equal(validName(bad), false, String(bad));
 });

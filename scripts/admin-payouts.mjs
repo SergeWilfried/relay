@@ -1,13 +1,14 @@
-// Back-office CLI for payouts (talks to /api/admin/*, protected by ADMIN_API_KEY).
-//   ADMIN_API_KEY=... API_URL=https://your-domain node scripts/admin-payouts.mjs list [status]
+// Back-office CLI for payouts (talks to /api/admin/*). Use YOUR personal admin key: ADMIN_KEY=rly_... (the shared ADMIN_API_KEY is the
+// root key: it can list but cannot approve, reject, retry or resolve). Approving is two-person: run it as two different people.
+//   ADMIN_KEY=rly_... API_URL=https://your-domain node scripts/admin-payouts.mjs list [status]
 //   ... approve <payoutId> | reject <payoutId> "<reason>" | retry <payoutId> | resolve <payoutId> paid|failed "<note>"
 // Locally: reads ADMIN_API_KEY from .dev.vars and defaults API_URL to http://localhost:5173.
 import { readFileSync } from 'node:fs';
 
-const key = process.env.ADMIN_API_KEY ?? /ADMIN_API_KEY=(\S+)/.exec(readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8'))?.[1];
+const key = process.env.ADMIN_KEY ?? process.env.ADMIN_API_KEY ?? /ADMIN_API_KEY=(\S+)/.exec(readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8'))?.[1];
 const base = process.env.API_URL ?? 'http://localhost:5173';
 const [cmd, id, a, b] = process.argv.slice(2);
-if (!key) throw new Error('Set ADMIN_API_KEY');
+if (!key) throw new Error('Set ADMIN_KEY (your personal admin key)');
 
 const call = async (path, method = 'GET', body) => {
   const res = await fetch(base + path, { method, headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });

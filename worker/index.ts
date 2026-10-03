@@ -13,6 +13,8 @@ import { clearClefFlag, runPatternReview } from './clefBatch';
 import { POINTS } from './clef';
 import { listSweeps, resolveSweep, retrySweep, runSweeps, SweepConflict } from './sweep';
 import { handleEvent, parseEvent } from './privy';
+import { authenticateAdmin, AdminError, createAdmin, listAdmins, listAudit, rotateKey, setActive, setRole, writeAudit } from './admins';
+import { canDo, permFor, type Actor } from './adminAuth';
 import { allow, allowUser, clientIp, secureApi, tooMany } from './ratelimit';
 import { handleSumsubEvent, kycStatus, listKyc, startKyc, SumsubError, syncKyc, verifySumsubWebhook } from './kyc';
 import type { SumsubEvent } from './kyc/sumsubSign';
@@ -69,12 +71,46 @@ async function privyWebhook(request: Request, env: Env): Promise<Response> {
 }
 
 const MAX_JSON_BYTES = 16 * 1024;
+/** Payouts of at least this many FCFA need two different approvers (FOUR_EYES_MIN_FCFA; 0 = every payout). Unset or invalid means every payout. */
+const fourEyesMin = (env: Env): number => { const n = Number((env as { FOUR_EYES_MIN_FCFA?: string }).FOUR_EYES_MIN_FCFA); return Number.isFinite(n) && n >= 0 ? n : 0; };
 
-/** Back-office endpoints for releasing payouts. Protected by the ADMIN_API_KEY secret (use a long random value). */
+/**
+ * Back-office API. Every caller is a named person (a personal key, see worker/admins.ts) or the root key, which only manages the team.
+ * Each request needs a permission by role (worker/adminAuth.ts permFor); every state-changing call, allowed or refused, is audited.
+ */
 async function adminApi(request: Request, env: Env, pathname: string, url: URL): Promise<Response> {
-	const key = /^Bearer (.+)$/i.exec(request.headers.get('authorization') ?? '')?.[1] ?? '';
-	if (!env.ADMIN_API_KEY || env.ADMIN_API_KEY.length < 16) return json({ error: 'Admin API is not configured' }, 503);
-	if (!safeEqual(key, env.ADMIN_API_KEY)) return json({ error: 'Unauthorized' }, 401);
+	const actor = await authenticateAdmin(request, env);
+	if (!actor) return json({ error: 'Unauthorized' }, 401);
+	const perm = permFor(request.method, pathname);
+	const mutating = request.method !== 'GET' && request.method !== 'HEAD';
+	let body: unknown = null;
+	if (mutating) { const raw = await request.clone().text().catch(() => ''); if (raw.length <= MAX_JSON_BYTES) { try { body = JSON.parse(raw); } catch { /* no body */ } } }
+	let res: Response;
+	if (!canDo(actor.role, perm)) {
+		res = json({ error: actor.role === 'root' ? 'The root key only manages the team: use your personal admin key' : `Your role (${actor.role}) cannot do this` }, 403);
+	} else {
+		try { res = await adminRoutes(request, env, pathname, url, actor); }
+		catch (e) { await writeAudit(env, { actor, method: request.method, pathname, status: 500, ip: clientIp(request), body }); throw e; }
+	}
+	if (mutating || res.status === 403) await writeAudit(env, { actor, method: request.method, pathname, status: res.status, ip: clientIp(request), body });
+	return res;
+}
+
+async function adminRoutes(request: Request, env: Env, pathname: string, url: URL, actor: Actor): Promise<Response> {
+	if (pathname === '/api/admin/me' && request.method === 'GET') return json({ name: actor.name, role: actor.role, fourEyesMinFcfa: fourEyesMin(env) });
+
+	// team and audit (owners and the root key)
+	try {
+		if (pathname === '/api/admin/admins' && request.method === 'GET') return json({ admins: await listAdmins(env) });
+		if (pathname === '/api/admin/admins' && request.method === 'POST') { const b = (await request.json().catch(() => ({}))) as { name?: unknown; role?: unknown }; return json(await createAdmin(env, actor, { name: b.name, role: b.role }), 201); }
+		const am = /^\/api\/admin\/admins\/(adm[a-z0-9]{6,32})\/(rotate-key|disable|enable|role)$/.exec(pathname);
+		if (am && request.method === 'POST') {
+			if (am[2] === 'rotate-key') return json(await rotateKey(env, am[1]!));
+			if (am[2] === 'role') { const b = (await request.json().catch(() => ({}))) as { role?: unknown }; return json({ admin: await setRole(env, actor, am[1]!, b.role) }); }
+			return json({ admin: await setActive(env, actor, am[1]!, am[2] === 'enable') });
+		}
+	} catch (e) { if (e instanceof AdminError) return json({ error: e.message }, e.status as 400 | 404 | 409); throw e; }
+	if (pathname === '/api/admin/audit' && request.method === 'GET') return json({ audit: await listAudit(env, { actor: url.searchParams.get('actor'), before: Number(url.searchParams.get('before')) || null, limit: Number(url.searchParams.get('limit')) || 100 }) });
 
 	if (pathname === '/api/admin/payouts' && request.method === 'GET') return json({ payouts: await listPayouts(env, url.searchParams.get('status') ?? undefined) });
 
@@ -128,28 +164,28 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 	if (pathname === '/api/admin/lists' && request.method === 'POST') {
 		const body = (await request.json().catch(() => ({}))) as { kind?: unknown; value?: unknown; note?: unknown };
 		if (typeof body.note !== 'string' || body.note.trim().length < 3) return json({ error: 'note is required (why is it listed?)' }, 400);
-		try { return json(await addEntry(env, String(body.kind), body.value, body.note.trim(), 'admin'), 201); }
+		try { return json(await addEntry(env, String(body.kind), body.value, body.note.trim(), actor.name), 201); }
 		catch (e) { if (e instanceof ListError) return json({ error: e.message }, 400); throw e; }
 	}
 	if (pathname === '/api/admin/lists/sync' && request.method === 'POST') return json(await resyncEntries(env));
 	const lm = /^\/api\/admin\/lists\/(\d{1,12})$/.exec(pathname);
 	if (lm && request.method === 'DELETE') {
-		const r = await removeEntry(env, Number(lm[1]), 'admin');
+		const r = await removeEntry(env, Number(lm[1]), actor.name);
 		return r.removed ? json(r) : json({ error: r.sync && !r.sync.synced ? `Could not remove it from Privy: ${r.sync.reason}. Nothing was changed.` : 'Not found' }, r.sync ? 502 : 404);
 	}
 	if (pathname === '/api/admin/refunds' && request.method === 'GET') return json({ refunds: await listRefunds(env, url.searchParams.get('status') ?? undefined) });
 	if (pathname === '/api/admin/refunds/eligible' && request.method === 'GET') return json({ orders: await listEligible(env) });
 	if (pathname === '/api/admin/refunds' && request.method === 'POST') {
 		const body = await request.json().catch(() => ({}));
-		try { return json(await createRefund(env, body as never), 201); } catch (e) { if (e instanceof RefundError) return json({ error: e.message }, e.status as 400 | 404 | 409); throw e; }
+		try { return json(await createRefund(env, { ...(body as object), by: actor.name } as never), 201); } catch (e) { if (e instanceof RefundError) return json({ error: e.message }, e.status as 400 | 404 | 409); throw e; }
 	}
 	const rf = /^\/api\/admin\/refunds\/(rf[a-z0-9]{6,32})\/(approve|sent|cancel)$/.exec(pathname);
 	if (rf && request.method === 'POST') {
 		const body = (await request.json().catch(() => ({}))) as { by?: unknown; txHash?: unknown; reason?: unknown };
 		try {
-			if (rf[2] === 'approve') return json(await approveRefund(env, rf[1]!, body.by));
-			if (rf[2] === 'sent') return json(await markRefundSent(env, rf[1]!, body.by, body.txHash));
-			return json(await cancelRefund(env, rf[1]!, body.by, body.reason));
+			if (rf[2] === 'approve') return json(await approveRefund(env, rf[1]!, actor.name));
+			if (rf[2] === 'sent') return json(await markRefundSent(env, rf[1]!, actor.name, body.txHash));
+			return json(await cancelRefund(env, rf[1]!, actor.name, body.reason));
 		} catch (e) { if (e instanceof RefundError) return json({ error: e.message }, e.status as 400 | 404 | 409); throw e; }
 	}
 	if (pathname === '/api/admin/swaps-orders' && request.method === 'GET') { const { results } = await env.DB.prepare('SELECT * FROM swap_orders ORDER BY created_at DESC LIMIT 200').all(); return json({ swaps: results }); }
@@ -157,7 +193,7 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 	const bm = /^\/api\/admin\/buys\/([a-z0-9]{6,32})\/(delivered|release-hold)$/.exec(pathname);
 	if (bm && request.method === 'POST') {
 		const body = (await request.json().catch(() => ({}))) as { by?: unknown; txHash?: unknown; note?: unknown };
-		try { return json(bm[2] === 'delivered' ? await markDelivered(env, bm[1]!, body.by, body.txHash) : await releaseBuyHold(env, bm[1]!, body.by, body.note)); }
+		try { return json(bm[2] === 'delivered' ? await markDelivered(env, bm[1]!, actor.name, body.txHash) : await releaseBuyHold(env, bm[1]!, actor.name, body.note)); }
 		catch (e) { if (e instanceof BuyError) return json({ error: e.message }, e.status as 400 | 404 | 409); throw e; }
 	}
 	if (pathname === '/api/admin/revenue' && request.method === 'GET') {
@@ -183,15 +219,15 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 	let body: { reason?: unknown; outcome?: unknown; note?: unknown } = {};
 	try { body = (await request.json()) as typeof body; } catch { /* body is optional for approve/retry */ }
 	try {
-		if (action === 'approve') return json(await approvePayout(env, id, 'admin'));
+		if (action === 'approve') return json(await approvePayout(env, id, actor.name, fourEyesMin(env)));
 		if (action === 'retry') return json(await retryPayout(env, id));
 		if (action === 'release-hold') {
 			if (typeof body.note !== 'string' || !body.note) return json({ error: 'note is required' }, 400);
-			return json(await releaseHold(env, id, 'admin', body.note));
+			return json(await releaseHold(env, id, actor.name, body.note));
 		}
 		if (action === 'reject') {
 			if (typeof body.reason !== 'string' || !body.reason) return json({ error: 'reason is required' }, 400);
-			return json(await rejectPayout(env, id, body.reason));
+			return json(await rejectPayout(env, id, body.reason, actor.name));
 		}
 		if ((body.outcome !== 'paid' && body.outcome !== 'failed') || typeof body.note !== 'string' || !body.note) return json({ error: 'outcome (paid|failed) and note are required' }, 400);
 		return json(await resolvePayout(env, id, body.outcome, body.note));

@@ -10,6 +10,8 @@ import Refunds from './Refunds';
 import Revenue from './Revenue';
 import Sweeps from './Sweeps';
 import Kyc from './Kyc';
+import Team from './Team';
+import Audit from './Audit';
 import type { AdminPayout } from './api';
 
 type Tab = 'pending' | 'progress' | 'failed' | 'done' | 'all';
@@ -36,14 +38,14 @@ function Login({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const go = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr(null); api.setKey(v.trim());
-    try { await api.listPayouts(); onDone(); } catch (x) { api.setKey(''); setErr(x instanceof Error ? x.message : 'Could not sign in'); } finally { setBusy(false); }
+    try { await api.me(); onDone(); } catch (x) { api.setKey(''); setErr(x instanceof Error ? x.message : 'Could not sign in'); } finally { setBusy(false); }
   };
   return (
     <div className="login"><div className="login-card">
       <h1 className="login-t">Relay admin</h1>
-      <p className="login-s">Enter the admin key to review payouts.</p>
+      <p className="login-s">Sign in with your personal admin key. Every action is recorded under your name.</p>
       <form onSubmit={go}>
-        <input className="login-in mono" type="password" autoComplete="off" placeholder="Admin key" aria-label="Admin key" value={v} onChange={(e) => setV(e.target.value)} autoFocus />
+        <input className="login-in mono" type="password" autoComplete="off" placeholder="Your admin key" aria-label="Admin key" value={v} onChange={(e) => setV(e.target.value)} autoFocus />
         <ErrorNote>{err}</ErrorNote>
         <ActionButton type="submit" busy={busy} busyLabel="Checking…" disabled={v.trim().length < 8} style={{ marginTop: 12 }}>Sign in</ActionButton>
       </form>
@@ -52,8 +54,12 @@ function Login({ onDone }: { onDone: () => void }) {
 }
 
 /** Confirmation sheet: shows exactly what will happen before any money moves. */
-function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () => void; onDone: () => void }) {
+function ActionSheet({ action, me, onClose, onDone }: { action: Action; me: api.Me | null; onClose: () => void; onDone: () => void }) {
   const { p, kind } = action;
+  // two-person rule: from the configured amount up, a first person approves and a different second person releases the money
+  const two = !!me && p.amount_fcfa >= me.fourEyesMinFcfa;
+  const first = two && !p.first_approver;
+  const second = two && !!p.first_approver;
   const { run, busy, error } = useSubmit();
   const [text, setText] = useState('');
   const [outcome, setOutcome] = useState<'paid' | 'failed'>('paid');
@@ -78,7 +84,9 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
         {p.deposit_tx && <div className="sub mono" style={{ wordBreak: 'break-all' }}>deposit {p.deposit_tx}</div>}
         {p.order_note && <div className="sub" style={{ color: '#C43232' }}>Note: {p.order_note}</div>}
       </div>
-      {kind === 'approve' && <div className="note" style={{ textAlign: 'left' }}>This sends the money. Check the number and the deposit first: payouts can't be reversed.</div>}
+      {kind === 'approve' && first && <div className="note" style={{ textAlign: 'left' }}>This is the <b>first of two approvals</b>. Nothing is sent yet: a different person must approve it too. Check the number and the deposit.</div>}
+      {kind === 'approve' && second && <div className="note" style={{ textAlign: 'left' }}><b>{p.first_approver}</b> gave the first approval. Your approval sends the money. Check the number and the deposit yourself: payouts can't be reversed.</div>}
+      {kind === 'approve' && !two && <div className="note" style={{ textAlign: 'left' }}>This sends the money. Check the number and the deposit first: payouts can't be reversed.</div>}
       {kind === 'release' && <div className="note" style={{ textAlign: 'left' }}>Held by {JSON.parse(p.hold_rules ?? '[]').join(', ')}. The customer was told: “{p.hold_message}” Only release it after checking them; the payout then goes back to normal approval.</div>}
       {kind === 'retry' && <div className="note" style={{ textAlign: 'left' }}>The provider refused this payout, so it is safe to send again.</div>}
       {kind === 'resolve' && (
@@ -96,7 +104,7 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
       )}
       <ErrorNote>{error}</ErrorNote>
       <ActionButton style={{ marginTop: 14 }} className={kind === 'reject' ? 'btn' : 'btn acc'} busy={busy} busyLabel="Working…" disabled={needsText && text.trim().length < 3} onClick={submit}>
-        {{ approve: `Approve and send ${fmtInt(p.amount_fcfa)} FCFA`, reject: 'Reject payout', retry: 'Retry now', resolve: 'Record outcome', release: 'Release hold' }[kind]}
+        {{ approve: first ? 'Give first approval' : `Approve and send ${fmtInt(p.amount_fcfa)} FCFA`, reject: 'Reject payout', retry: 'Retry now', resolve: 'Record outcome', release: 'Release hold' }[kind]}
       </ActionButton>
     </Sheet>
   );
@@ -104,8 +112,9 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => !!api.getKey());
+  const [me, setMe] = useState<api.Me | null>(null);
   const [rows, setRows] = useState<AdminPayout[] | null>(null);
-  const [view, setView] = useState<'payouts' | 'deliveries' | 'float' | 'sweeps' | 'refunds' | 'revenue' | 'kyc'>('payouts');
+  const [view, setView] = useState<'payouts' | 'deliveries' | 'float' | 'sweeps' | 'refunds' | 'revenue' | 'kyc' | 'team' | 'audit'>('payouts');
   const [tab, setTab] = useState<Tab>('pending');
   const [action, setAction] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +130,8 @@ export default function Admin() {
     return () => m.remove();
   }, []);
   useEffect(() => {
-    if (!authed) return;
+    if (!authed) { setMe(null); return; }
+    api.me().then(setMe).catch((e) => { if (e instanceof api.AdminAuthError) { api.setKey(''); setAuthed(false); } });
     void load();
     const t = setInterval(() => void load(), 15000);
     return () => clearInterval(t);
@@ -140,7 +150,8 @@ export default function Admin() {
     <div className="admin">
       <header className="admin-hd">
         <div className="logo"><div className="logo-mark">R</div><div className="logo-text">Relay admin</div></div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {me && <span className="sub" title="Everything you do is recorded under this name">{me.role === 'root' ? 'root key' : `${me.name} · ${me.role}`}</span>}
           <button className="pill" onClick={() => void load()}>Refresh</button>
           <button className="pill" onClick={() => { api.setKey(''); setAuthed(false); setRows(null); }}>Sign out</button>
         </div>
@@ -154,7 +165,13 @@ export default function Admin() {
         <button role="tab" aria-selected={view === 'refunds'} className={`admin-tab${view === 'refunds' ? ' on' : ''}`} onClick={() => setView('refunds')}>Refunds</button>
         <button role="tab" aria-selected={view === 'revenue'} className={`admin-tab${view === 'revenue' ? ' on' : ''}`} onClick={() => setView('revenue')}>Revenue</button>
         <button role="tab" aria-selected={view === 'kyc'} className={`admin-tab${view === 'kyc' ? ' on' : ''}`} onClick={() => setView('kyc')}>KYC</button>
+        {api.canManage(me) && <button role="tab" aria-selected={view === 'team'} className={`admin-tab${view === 'team' ? ' on' : ''}`} onClick={() => setView('team')}>Team</button>}
+        {api.canManage(me) && <button role="tab" aria-selected={view === 'audit'} className={`admin-tab${view === 'audit' ? ' on' : ''}`} onClick={() => setView('audit')}>Audit</button>}
       </div>
+      {me?.role === 'root' && <div className="note" style={{ textAlign: 'left' }}>You are signed in with the shared root key. It can manage the team and read, but cannot move money: create a personal key for yourself in Team, then sign in with that.</div>}
+      {me?.role === 'viewer' && <div className="note" style={{ textAlign: 'left' }}>Read-only access.</div>}
+      {view === 'team' && me && <Team me={me} onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
+      {view === 'audit' && <Audit onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'deliveries' && <Deliveries onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'float' && <Float onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'kyc' && <Kyc onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
@@ -182,24 +199,28 @@ export default function Admin() {
               <div className="sub">{p.order_amount} {p.asset} · {p.operator} <span className="mono">{p.phone}</span></div>
               <div className="sub">{when(p.created_at)} · order {p.order_id} · attempts {p.attempts}</div>
               {holdOf(p) && <div className="sub" style={{ color: '#B7791F' }}>On hold ({JSON.parse(p.hold_rules ?? '[]').join(', ')}) {p.hold_until ? `until ${when(p.hold_until)}` : 'until released'}</div>}
+              {p.status === 'pending_approval' && p.first_approver && <div className="sub" style={{ color: '#B7791F' }}>First approval by {p.first_approver} ({p.first_approved_at ? when(p.first_approved_at) : "earlier"}). Waiting for a second person.</div>}
+              {p.approved_by && <div className="sub">Approved by {p.first_approver ? `${p.first_approver} and ${p.approved_by}` : p.approved_by}</div>}
+              {p.rejected_by && <div className="sub">Rejected by {p.rejected_by}</div>}
               {p.error && <div className="sub" style={{ color: '#C43232' }}>{p.error}</div>}
               {p.order_note && <div className="sub" style={{ color: '#C43232' }}>Order: {p.order_note}</div>}
             </div>
             <div className="admin-act">
-              {p.status === 'pending_approval' && (<>
+              {api.canOperate(me) && p.status === 'pending_approval' && (<>
                 {holdOf(p)
                   ? <button className="btn acc sm fit" onClick={() => setAction({ kind: 'release', p })}>Release hold</button>
-                  : <button className="btn acc sm fit" onClick={() => setAction({ kind: 'approve', p })}>Approve</button>}
+                  : <button className="btn acc sm fit" disabled={!!p.first_approver && p.first_approver.toLowerCase() === me?.name.toLowerCase()} title={p.first_approver?.toLowerCase() === me?.name.toLowerCase() ? 'You gave the first approval: a different person must give the second' : undefined}
+                      onClick={() => setAction({ kind: 'approve', p })}>{me && p.amount_fcfa >= me.fourEyesMinFcfa ? (p.first_approver ? 'Approve (2 of 2)' : 'Approve (1 of 2)') : 'Approve'}</button>}
                 <button className="btn sec sm fit" onClick={() => setAction({ kind: 'reject', p })}>Reject</button>
               </>)}
-              {p.status === 'failed' && <button className="btn sec sm fit" onClick={() => setAction({ kind: 'retry', p })}>Retry</button>}
-              {p.status === 'sending' && unknownOutcome(p) && <button className="btn sec sm fit" onClick={() => setAction({ kind: 'resolve', p })}>Resolve</button>}
+              {api.canOperate(me) && p.status === 'failed' && <button className="btn sec sm fit" onClick={() => setAction({ kind: 'retry', p })}>Retry</button>}
+              {api.canOperate(me) && p.status === 'sending' && unknownOutcome(p) && <button className="btn sec sm fit" onClick={() => setAction({ kind: 'resolve', p })}>Resolve</button>}
             </div>
           </div>
         ))}
       </div>
 
-      {action && <ActionSheet action={action} onClose={() => setAction(null)} onDone={() => { setAction(null); void load(); }} />}
+      {action && <ActionSheet action={action} me={me} onClose={() => setAction(null)} onDone={() => { setAction(null); void load(); }} />}
       </>}
     </div>
   );
