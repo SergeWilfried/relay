@@ -8,7 +8,7 @@ export function Done({ title, sub }: { title: string; sub: string }) {
   return (
     <div className="done-card">
       <div className="check">✓</div>
-      <div className="status-t">{title}</div>
+      <h1 className="status-t">{title}</h1>
       <div className="status-s">{sub}</div>
       <Link to="/pool" className="btn sec fit" style={{ textDecoration: 'none' }}>{t('Back to pools')}</Link>
     </div>

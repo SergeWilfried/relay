@@ -171,7 +171,7 @@ button.chip { cursor: pointer; }
 .spin.lg { width: 46px; height: 46px; border-width: 3px; }
 .status-top { display: flex; flex-direction: column; align-items: center; padding: 14px 0 6px; text-align: center; }
 .check { width: 46px; height: 46px; border-radius: 50%; background: var(--acc); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; color: #fff; }
-.status-t { margin-top: 14px; font-weight: 800; font-size: 18px; }
+.status-t { margin: 14px 0 0; font-weight: 800; font-size: 18px; }
 .status-s { margin-top: 4px; font-weight: 500; font-size: 12.5px; color: var(--mut); }
 .hash { text-align: center; font-family: 'Space Mono', monospace; font-size: 11.5px; color: var(--mut); margin-bottom: 12px; }
 
@@ -381,3 +381,12 @@ button.chip { cursor: pointer; }
 button.chip { min-height: 44px; }
 .logo { position: relative; }
 .logo::after { content: ''; position: absolute; inset: -9px -6px; }
+
+/* visually hidden, still announced: page titles for screens whose heading is the form itself */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* the whole amount row is the tap target for the field (the digits alone were 27px tall) */
+.amt.edit { min-height: 64px; }
+input.amt-val { min-height: 32px; }
+.amt-sub .amt-fix { display: block; padding: 9px 0 3px; color: var(--acct); font-weight: 700; }  /* always on its own line: a bigger, steadier target */
+.help-link { display: block; margin: 10px auto 0; padding: 8px 12px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--mut); text-decoration: underline; text-underline-offset: 3px; }
+.help-link:hover { color: var(--ink); }

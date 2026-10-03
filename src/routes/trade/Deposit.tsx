@@ -112,7 +112,7 @@ export default function Deposit() {
         <>
           <div className="qrwrap" role="alert">
             <div className="check bad">!</div>
-            <div className="status-t">{t('Quote expired')}</div>
+            <h1 className="status-t">{t('Quote expired')}</h1>
             <div className="status-s" style={{ maxWidth: 280, textAlign: 'center', lineHeight: 1.5 }}>
               {t("The 15-minute window for {amount} at this rate has ended. If you've already sent it, it will be converted at the current rate instead.", { amount: order.quote.summaryFrom })}
             </div>

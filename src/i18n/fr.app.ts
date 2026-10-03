@@ -482,4 +482,6 @@ export const app: Record<string, string> = {
   "We'll detect your deposit automatically": "Nous détecterons votre dépôt automatiquement",
   "By continuing, you agree to the": "En continuant, vous acceptez le",
   "About 2 minutes, usually instant. The rate is refreshed when you come back.": "Environ 2 minutes, souvent instantané. Le cours est actualisé à votre retour.",
+  "Use the maximum": "Utiliser le maximum",
+  "Need help?": "Besoin d’aide ?",
 };

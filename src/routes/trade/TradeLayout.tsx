@@ -14,6 +14,7 @@ function Card() {
   return (
     <div className="page trade">
       <div className="shell">
+        {isForm && <h1 className="sr-only">{tl(TABS.find(([t]) => t === tab)?.[1] ?? 'Trade')}</h1>}
         {isForm && (
           <div className="ftabs" role="tablist" aria-label={tl('Trade type')}>
             {TABS.map(([t, label]) => (

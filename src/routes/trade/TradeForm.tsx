@@ -5,7 +5,7 @@ import { AssetPicker } from '../../components/AssetPicker';
 import { FieldRow } from '../../components/FieldRow';
 import { ProviderGrid } from '../../components/ProviderGrid';
 import { RateTimeline } from '../../components/RateTimeline';
-import { FCFA_COLOR, NETWORK_LOGO, type Asset, type Tab } from '../../lib/data';
+import { FCFA_COLOR, NETWORK_LOGO, type Asset, type Tab, SUPPORT_EMAIL } from '../../lib/data';
 import { fmtCrypto, fmtInt, parseAmount } from '../../lib/format';
 import { useQuote } from '../../lib/api';
 import { useOnline } from '../../lib/net';
@@ -62,6 +62,15 @@ export default function TradeForm() {
     : breach.kind === 'perTx' ? tl('Maximum per transaction: {amount} FCFA', { amount: fmtInt(breach.max) })
     : breach.kind === 'daily' ? tl('Daily limit: {amount} FCFA left today', { amount: fmtInt(breach.remaining) })
     : tl('Monthly limit: {amount} FCFA left this month', { amount: fmtInt(breach.remaining) });
+  // what the limit that was hit still allows, in FCFA (a one-tap fix instead of making the customer do the arithmetic)
+  const allowedFcfa = !breach ? 0 : breach.kind === 'perTx' ? breach.max : breach.remaining;
+  const fillAllowed = () => {
+    if (!(allowedFcfa > 0)) return;
+    if (tab === 'buy') { t.setAmount(String(Math.floor(allowedFcfa))); return; }
+    if (!(q.fcfaGross > 0)) return;
+    const f = 10 ** Math.min(6, t.from.dec); // the field keeps at most 6 decimals; rounding down keeps it inside the limit
+    t.setAmount(String(Math.floor(parseAmount(t.amount) * (allowedFcfa / q.fcfaGross) * f) / f));
+  };
   const reviewLabel = tl(CTA_KEY[tab]);
   const cta = !online ? tl("You're offline") : zero ? tl('Enter an amount') : failed ? tl('Quote unavailable') : q.insufficient && !zero ? tl('Insufficient balance') : breach ? tl('Exceeds your limit') : needAmt ? tl('Confirm amount') : needProv ? tl('Choose a provider') : needPhone ? (byAlias ? tl('Add your PI-SPI alias') : tl('Add your mobile money number')) : needWallet ? tl('Add receiving address') : reviewLabel;
   // these block the button even on the "Confirm amount" step: an amount that is empty, over a limit or unaffordable must not move forward
@@ -94,7 +103,7 @@ export default function TradeForm() {
       <AmountRow
         label={tab === 'sell' ? tl('You sell') : tl('You pay')}
         chip={fromChip}
-        sub={breachText ?? (tab === 'sell' ? fromSub : q.fromSub)}
+        sub={breachText ? <>{breachText}{allowedFcfa > 0 && <button type="button" className="amt-fix" onClick={fillAllowed}>{tl('Use the maximum')}</button>}</> : (tab === 'sell' ? fromSub : q.fromSub)}
         subError={q.insufficient || !!breach}
         value={t.amount} onChange={t.setAmount} decimals={tab !== 'buy'}
       />
@@ -123,6 +132,7 @@ export default function TradeForm() {
 
       <div className="agree">{tl('By continuing, you agree to the')} <a href="#terms">{tl('User Agreement')}</a>.</div>
       <button className="btn" disabled={blocked || (disabled && !needAmt)} onClick={go}>{cta}</button>
+      <a className="help-link" href={`mailto:${SUPPORT_EMAIL}`}>{tl('Need help?')}</a>
 
       {phoneOpen && t.provider && <AccountSheet operator={t.provider.name} alias={byAlias} current={t.account} onSave={byAlias ? t.setAlias : t.setPhone} onClose={() => setPhoneOpen(false)} />}
       {walletOpen && <WalletSheet net={t.from.net} current={t.wallet} onPick={t.setWallet} onClose={() => setWalletOpen(false)} />}

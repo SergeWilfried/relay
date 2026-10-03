@@ -81,7 +81,7 @@ export default function Pay() {
       {failed ? (
         <>
           <div className="status-top"><div className="check bad">✕</div>
-            <div className="status-t">{t("This didn't go through")}</div>
+            <h1 className="status-t">{t("This didn't go through")}</h1>
             <div className="status-s">{b?.failure ? tr(b.failure) : b?.status === 'expired' ? t('This quote has expired. Please start the purchase again.') : t('The payment could not be completed')}</div>
           </div>
           <div className="notice" role="status">{t('Nothing was charged.')}</div>
@@ -106,9 +106,9 @@ export default function Pay() {
         <>
           <div className="status-top" aria-live="polite">
             <Spinner large />
-            <div className="status-t">
+            <h1 className="status-t">
               {authType === 'REDIRECT_AUTH' ? (b?.authUrl ? t('Continue to {provider}', { provider }) : t('Preparing {provider}…', { provider })) : t('Approve the payment on your phone')}
-            </div>
+            </h1>
             <div className="status-s">
               {authType === 'REDIRECT_AUTH' ? t("You'll approve {amount} in the {provider} app, then come back here.", { amount, provider }) : t('We asked {provider} to charge {amount}. Enter your PIN to approve it.', { provider, amount })}
             </div>
