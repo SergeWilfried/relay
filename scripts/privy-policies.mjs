@@ -1,11 +1,12 @@
 // Creates the Privy policies for Relay's deposit wallets.
 //   node scripts/privy-policies.mjs            -> dry run: prints what would be created, sends nothing
 //   node scripts/privy-policies.mjs --apply    -> creates them in your Privy app and prints the ids to configure
+//   add --swap to include the override policies for the swap signer
 //   add --users to include the policies for users' own wallets (tier caps, frozen)
 // --apply needs PRIVY_APP_ID and PRIVY_APP_SECRET (environment, or .dev.vars). The dry run needs nothing.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { buildPolicies, buildUserPolicies, DENY_SETS } from './privy-policy-defs.mjs';
+import { buildPolicies, buildSwapSignerPolicies, buildUserPolicies, DENY_SETS } from './privy-policy-defs.mjs';
 
 try {
   for (const line of readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8').split('\n')) {
@@ -21,9 +22,11 @@ const treasurySol = process.env.TREASURY_SOL || undefined;
 if (!treasuryEvm) console.warn('TREASURY_EVM is not set: the EVM policy will NOT lock the destination.');
 if (!treasurySol) console.warn('TREASURY_SOL is not set: the Solana policy will NOT lock the destination.');
 const withUsers = process.argv.includes('--users');
+// --swap creates the override policies for the swap signer (see buildSwapSignerPolicies); the ids go in VITE_PRIVY_SWAP_POLICY_EVM / _SOL
+const withSwap = process.argv.includes('--swap');
 
 if (!apply) {
-  const policies = [...buildPolicies({ treasuryEvm, treasurySol }), ...(withUsers ? buildUserPolicies() : [])];
+  const policies = [...buildPolicies({ treasuryEvm, treasurySol }), ...(withUsers ? buildUserPolicies() : []), ...(withSwap ? buildSwapSignerPolicies() : [])];
   console.log(JSON.stringify(policies.map((p) => p.body), null, 2));
   console.log('\nDry run only. Re-run with --apply to create these in your Privy app.');
   process.exit(0);
@@ -50,7 +53,7 @@ if (withUsers) {
     denySets[set.env === 'PRIVY_DENY_SET_EVM' ? 'evm' : 'sol'] = out.id;
   }
 }
-const policies = [...buildPolicies({ treasuryEvm, treasurySol }), ...(withUsers ? buildUserPolicies({ denySets }) : [])];
+const policies = [...buildPolicies({ treasuryEvm, treasurySol }), ...(withUsers ? buildUserPolicies({ denySets }) : []), ...(withSwap ? buildSwapSignerPolicies() : [])];
 
 for (const p of policies) {
   const res = await fetch('https://api.privy.io/v1/policies', {

@@ -8,6 +8,7 @@ import { mmss, useNow, useOnline } from '../../lib/net';
 import { QUOTE_TTL_MS, submitDraft } from '../../lib/orders';
 import { useAuth } from '../../auth/AuthContext';
 import { createServerBuy, createServerOrder } from '../../lib/serverOrders';
+import { createServerSwap } from '../../lib/swapLive';
 import { useT } from '../../i18n';
 import { useApp } from '../../state/app';
 import { useTrade } from '../../state/trade';
@@ -47,6 +48,10 @@ export default function Review() {
   // auto-refresh at expiry (waits for the network to come back)
   useEffect(() => { if (expired && phase === 'live' && online) refresh(); }, [expired, phase, online, refresh]);
 
+  // swaps run from the customer's own wallet: they authorise Relay's server (a signer) once per wallet before the first swap
+  const swapNet = draft?.from.net === 'Solana' ? 'Solana' : 'Ethereum';
+  const needsSigner = auth.mode === 'privy' && draft?.tab === 'swap' && !auth.swapReady(swapNet);
+  const enable = () => run(async () => { await auth.enableSwaps(swapNet); });
   const canConfirm = !!draft && !expired && phase === 'live' && online && !busy;
 
   const confirm = () => {
@@ -60,6 +65,17 @@ export default function Review() {
       if (auth.mode === 'privy' && order.tab === 'sell') {
         const s = await createServerOrder(order);
         order = { ...order, synced: true, depositAddress: s.depositAddress, depositLive: s.depositLive, depositExpiresAt: s.expiresAt };
+      }
+      // swaps: the server runs the rules, then Privy executes the swap from the customer's own wallet
+      if (auth.mode === 'privy' && order.tab === 'swap') {
+        let w;
+        try { w = await createServerSwap(order); }
+        catch (e) {
+          // the signer was removed or never added: ask for the consent again instead of failing
+          if ((e as { code?: string }).code === 'signer_required') await auth.enableSwaps(swapNet).then(async () => { w = await createServerSwap(order); });
+          else throw e;
+        }
+        order = { ...order, synced: true, swap: w ?? null, startedAt: Date.now() };
       }
       // purchases: the server fixes the quote and the payment method; the customer then pays from the Pay screen
       if (auth.mode === 'privy' && order.tab === 'buy') {
@@ -99,8 +115,13 @@ export default function Review() {
         {q.rows.map(([k, v]) => <div className="kv-r" key={k}><div>{k}</div><div>{v}</div></div>)}
       </div>
 
-      <ActionButton onClick={confirm} busy={busy} busyLabel={t('Confirming…')} disabled={!canConfirm && !busy}>
-        {phase === 'refreshing' ? t('Refreshing quote…') : !online ? t("You're offline") : phase === 'error' ? t('Quote expired') : t('Confirm')}
+      {needsSigner && (
+        <div className="notice" role="status">
+          <b>{t('Allow swaps from your wallet.')}</b> {t('You approve this once. Relay can then run swaps for you, and only swaps: your funds stay in your wallet.')}
+        </div>
+      )}
+      <ActionButton onClick={needsSigner ? enable : confirm} busy={busy} busyLabel={needsSigner ? t('Waiting for your approval…') : t('Confirming…')} disabled={needsSigner ? !online || expired || phase !== 'live' : !canConfirm && !busy}>
+        {phase === 'refreshing' ? t('Refreshing quote…') : !online ? t("You're offline") : phase === 'error' ? t('Quote expired') : needsSigner ? t('Enable swaps') : t('Confirm')}
       </ActionButton>
       <ErrorNote>{error}</ErrorNote>
 

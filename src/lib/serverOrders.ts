@@ -53,7 +53,7 @@ export interface ServerBuy {
 /** 1.5 -> "1.5", 0.000123 -> "0.000123" (never exponent notation, which the server rejects). */
 const plain = (n: number) => n.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 
-async function readError(res: Response): Promise<string> {
+export async function readError(res: Response): Promise<string> {
   // the server replies in English; known messages are translated, anything else is shown as received
   const fallback = tr('Request failed ({status})', { status: res.status });
   try { const e = ((await res.json()) as { error?: string }).error; return e ? tr(e) : fallback; } catch { return fallback; }
@@ -69,19 +69,19 @@ export async function createServerOrder(o: Order): Promise<ServerOrder> {
   return (await res.json()) as ServerOrder;
 }
 
-export async function fetchServerOrder(id: string): Promise<ServerOrder | ServerBuy | null> {
+export async function fetchServerOrder(id: string): Promise<ServerOrder | ServerBuy | import('./swapLive').ServerSwap | null> {
   const res = await apiFetch(`/orders/${encodeURIComponent(id)}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as ServerOrder | ServerBuy;
+  return (await res.json()) as ServerOrder | ServerBuy | import('./swapLive').ServerSwap;
 }
 
 /** The user's server orders: cash-outs and purchases. */
-export async function listServerOrders(): Promise<{ orders: ServerOrder[]; buys: ServerBuy[] }> {
+export async function listServerOrders(): Promise<{ orders: ServerOrder[]; buys: ServerBuy[]; swaps: import('./swapLive').ServerSwap[] }> {
   const res = await apiFetch('/orders');
   if (!res.ok) throw new Error(await readError(res));
-  const j = (await res.json()) as { orders: ServerOrder[]; buys?: ServerBuy[] };
-  return { orders: j.orders, buys: j.buys ?? [] };
+  const j = (await res.json()) as { orders: ServerOrder[]; buys?: ServerBuy[]; swaps?: import('./swapLive').ServerSwap[] };
+  return { orders: j.orders, buys: j.buys ?? [], swaps: j.swaps ?? [] };
 }
 
 /** Registers a purchase (the quote is fixed, nothing is charged yet). Idempotent per order id. */
@@ -120,4 +120,4 @@ export function patchFromServerBuy(o: Order, b: ServerBuy): Partial<Order> | nul
 }
 
 /** Terminal server states: nothing more to poll for. */
-export const isSettled = (o: Order) => (o.tab === 'buy' && !!o.buy && ['delivered', 'failed', 'expired', 'cancelled'].includes(o.buy.status)) || !!o.server && (o.server.status === 'underpaid' || ['paid', 'failed', 'rejected'].includes(o.server.payout ?? ''));
+export const isSettled = (o: Order) => (o.tab === 'swap' && !!o.swap && ['succeeded', 'failed', 'rejected'].includes(o.swap.status)) || (o.tab === 'buy' && !!o.buy && ['delivered', 'failed', 'expired', 'cancelled'].includes(o.buy.status)) || !!o.server && (o.server.status === 'underpaid' || ['paid', 'failed', 'rejected'].includes(o.server.payout ?? ''));

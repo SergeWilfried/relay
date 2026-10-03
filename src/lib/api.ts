@@ -4,14 +4,16 @@ import { parseAmount } from './format';
 import { mockFlag } from './mock';
 import { getQuote, type Quote } from './quote';
 import { useDebounced } from './useDebounced';
+import { quoteSwapLive } from './swapLive';
 import { tr, useT } from '../i18n';
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export interface QuoteParams { tab: Tab; from: Asset; to: Asset; provider: Provider | null; wallet: string; balance?: number | null }
+export interface QuoteParams { tab: Tab; from: Asset; to: Asset; provider: Provider | null; wallet: string; balance?: number | null; /** a signed-in live user: swaps are quoted by the server (Privy), not by the local model */ live?: boolean }
 
 /** Quote API stand-in: replace the body with a real request. `refresh` = re-quote of a locked order. */
 export async function fetchQuote(p: QuoteParams, amount: number, opts: { refresh?: boolean } = {}): Promise<Quote> {
+  if (p.live && p.tab === 'swap') return quoteSwapLive(p, amount);
   await delay(opts.refresh ? 500 : 180);
   const f = mockFlag('quote');
   if (f === 'error') throw new Error('Quote unavailable');
@@ -35,7 +37,7 @@ export function useQuote(p: QuoteParams, rawAmount: string) {
   const { lang } = useT(); // quote strings are generated in the active language
   const debounced = useDebounced(rawAmount, 250);
   const [nonce, setNonce] = useState(0);
-  const key = `${p.tab}|${p.from.sym}|${p.to.sym}|${p.provider?.id ?? ''}|${p.wallet}|${p.balance ?? 'x'}|${debounced}|${nonce}|${lang}`;
+  const key = `${p.tab}|${p.from.sym}|${p.to.sym}|${p.provider?.id ?? ''}|${p.wallet}|${p.balance ?? 'x'}|${debounced}|${nonce}|${lang}|${p.live ? 'live' : ''}`;
   const local = useMemo(() => getQuote({ tab: p.tab, amount: parseAmount(debounced), from: p.from, to: p.to, balance: p.balance }, p.provider, p.wallet),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [p.tab, p.from, p.to, p.provider, p.wallet, p.balance, debounced, lang]);

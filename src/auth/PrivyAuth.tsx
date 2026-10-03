@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { PrivyProvider, useCreateWallet, usePrivy, useSendTransaction, useUser } from '@privy-io/react-auth';
+import { PrivyProvider, useCreateWallet, usePrivy, useSendTransaction, useSigners, useUser } from '@privy-io/react-auth';
 import { useCreateWallet as useCreateSolanaWallet, useSignAndSendTransaction, useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import { buildSolTransfer, signatureToString } from '../lib/solanaTransfer';
 import { planSend } from '../lib/send';
+import { fetchSwapStatus } from '../lib/swapLive';
 import { setTokenGetter } from '../lib/http';
 import { tr } from '../i18n';
 import { useTheme } from '../state/theme';
 import { AuthCtx, type AuthState, type Network } from './AuthContext';
 
-interface LinkedWallet { type: string; address?: string; chainType?: string; walletClientType?: string }
+interface LinkedWallet { type: string; address?: string; chainType?: string; walletClientType?: string; /** Relay's signer was added to this wallet (swaps) */ delegated?: boolean }
 type Chain = 'Ethereum' | 'Solana';
 
 const errMessage = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Unknown error');
@@ -21,6 +22,7 @@ function Bridge({ children }: { children: ReactNode }) {
   const { createWallet: createSolana } = useCreateSolanaWallet();
   const { sendTransaction } = useSendTransaction();
   const { signAndSendTransaction } = useSignAndSendTransaction();
+  const { addSigners } = useSigners();
   const { wallets: solWallets } = useSolanaWallets();
 
   const linked = useMemo(() => ((user?.linkedAccounts ?? []) as LinkedWallet[]).filter((a) => a.type === 'wallet' && a.address), [user]);
@@ -96,6 +98,17 @@ function Bridge({ children }: { children: ReactNode }) {
       const transaction = await buildSolTransfer(from, plan.to, plan.lamports);
       const { signature } = await signAndSendTransaction({ transaction, wallet, chain: 'solana:mainnet' });
       return signatureToString(signature);
+    },
+    // swaps: the customer consents once per wallet to let Relay's server (a signer) ask Privy to run swaps from it
+    swapReady: (net) => linked.some((a) => isEmbedded(a) && a.chainType === (net === 'Solana' ? 'solana' : 'ethereum') && !!a.delegated),
+    enableSwaps: async (net) => {
+      const address = wallets[net];
+      if (!address) throw new Error(tr('Your {net} wallet is not ready yet.', { net }));
+      const info = await fetchSwapStatus();
+      if (!info.configured || !info.signerId) throw new Error(tr('Swaps are not available yet'));
+      const policy = net === 'Solana' ? info.policyIds.solana : info.policyIds.ethereum;
+      await addSigners({ address, signers: [{ signerId: info.signerId, policyIds: policy ? [policy] : [] }] });
+      try { await refreshUser(); } catch { /* the user object refreshes on its own shortly after */ }
     },
     openLogin: () => login(),
     logout,

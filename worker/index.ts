@@ -1,5 +1,6 @@
 import { AuthError, authenticate } from './auth';
 import { BadRequest, createSellOrder, getOrder, listOrders } from './orders';
+import { createSwap, getSwap, listSwaps, quoteSwap, reconcileSwaps, SwapError, swapStatus } from './swaps';
 import { BuyError, createBuyOrder, getBuy, listBuys, listBuysAdmin, markDelivered, payBuyOrder, reconcileBuys, releaseBuyHold, settle as settleBuy } from './buys';
 import { getDepositProvider } from './deposit';
 import { approveRefund, cancelRefund, checkStaleRefunds, createRefund, listEligible, listRefunds, markRefundSent, RefundError } from './refunds';
@@ -141,6 +142,7 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 			return json(await cancelRefund(env, rf[1]!, body.by, body.reason));
 		} catch (e) { if (e instanceof RefundError) return json({ error: e.message }, e.status as 400 | 404 | 409); throw e; }
 	}
+	if (pathname === '/api/admin/swaps-orders' && request.method === 'GET') { const { results } = await env.DB.prepare('SELECT * FROM swap_orders ORDER BY created_at DESC LIMIT 200').all(); return json({ swaps: results }); }
 	if (pathname === '/api/admin/buys' && request.method === 'GET') return json({ buys: await listBuysAdmin(env, url.searchParams.get('status') ?? undefined) });
 	const bm = /^\/api\/admin\/buys\/([a-z0-9]{6,32})\/(delivered|release-hold)$/.exec(pathname);
 	if (bm && request.method === 'POST') {
@@ -199,6 +201,34 @@ async function payoutWebhook(request: Request, env: Env): Promise<Response> {
 	return json({ ok: true });
 }
 
+/** Swap API (Privy's swap wallet action). Authenticated: a user only ever sees and swaps from their own wallets. */
+async function swapApi(request: Request, env: Env, pathname: string): Promise<Response> {
+	let userId: string;
+	try { userId = await authenticate(request, env); }
+	catch (e) {
+		if (e instanceof AuthError) return json({ error: e.message }, 401);
+		console.error(JSON.stringify({ msg: 'auth.misconfigured', error: e instanceof Error ? e.message : String(e) }));
+		return json({ error: 'Authentication is not configured' }, 500);
+	}
+	const fail = (e: unknown) => {
+		if (e instanceof SwapError) return json({ error: e.message, ...(e.code ? { code: e.code } : {}) }, e.status as 400 | 409 | 429 | 502 | 503);
+		if (e instanceof RuleDenied) return json({ error: e.message, rules: e.ruleIds }, e.status as 403 | 422 | 429);
+		throw e;
+	};
+	try {
+		if (pathname === '/api/swap/status' && request.method === 'GET') return json(await swapStatus(env, userId));
+		if ((pathname === '/api/swap/quote' || pathname === '/api/swap') && request.method === 'POST') {
+			if (Number(request.headers.get('content-length') ?? 0) > MAX_JSON_BYTES) return json({ error: 'Payload too large' }, 413);
+			const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+			if (!body || typeof body !== 'object') return json({ error: 'Invalid JSON' }, 400);
+			return pathname === '/api/swap/quote' ? json(await quoteSwap(env, userId, body as never)) : json(await createSwap(env, userId, body as never, countryOf(request)), 201);
+		}
+		const m = /^\/api\/swap\/([a-z0-9]{6,32})$/.exec(pathname);
+		if (m && request.method === 'GET') { const sw = await getSwap(env, userId, m[1]!); return sw ? json(sw) : json({ error: 'Not found' }, 404); }
+	} catch (e) { return fail(e); }
+	return json({ error: 'Not found' }, 404);
+}
+
 /** Deposit (buy payment) callbacks from the payment provider. Verified like payout callbacks; an unsigned one is confirmed with a status call. */
 async function depositWebhook(request: Request, env: Env): Promise<Response> {
 	const body = await request.text();
@@ -245,7 +275,7 @@ async function ordersApi(request: Request, env: Env, ctx: ExecutionContext, path
 		}
 	}
 
-	if (pathname === '/api/orders' && request.method === 'GET') return json({ orders: await listOrders(env, userId), buys: getDepositProvider(env) ? await listBuys(env, userId) : [] });
+	if (pathname === '/api/orders' && request.method === 'GET') return json({ orders: await listOrders(env, userId), buys: getDepositProvider(env) ? await listBuys(env, userId) : [], swaps: await listSwaps(env, userId) });
 
 	const pay = /^\/api\/orders\/([a-z0-9]{6,32})\/pay$/.exec(pathname);
 	if (pay && request.method === 'POST') {
@@ -259,7 +289,9 @@ async function ordersApi(request: Request, env: Env, ctx: ExecutionContext, path
 		const order = await getOrder(env, userId, m[1]!);
 		if (order) return json(order);
 		const buy = getDepositProvider(env) ? await getBuy(env, userId, m[1]!) : null;
-		return buy ? json(buy) : json({ error: 'Not found' }, 404);
+		if (buy) return json(buy);
+		const sw = await getSwap(env, userId, m[1]!);
+		return sw ? json(sw) : json({ error: 'Not found' }, 404);
 	}
 	return json({ error: 'Not found' }, 404);
 }
@@ -277,6 +309,7 @@ export default {
 			if (pathname.startsWith('/api/admin/')) return await adminApi(request, env, pathname, new URL(request.url));
 			if (pathname === '/api/webhooks/deposit') return request.method === 'POST' ? await depositWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
 			if (pathname === '/api/webhooks/payout') return request.method === 'POST' ? await payoutWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
+			if (pathname === '/api/swap' || pathname.startsWith('/api/swap/')) return await swapApi(request, env, pathname);
 			if (pathname === '/api/orders' || pathname.startsWith('/api/orders/')) return await ordersApi(request, env, ctx, pathname);
 			if (pathname.startsWith('/api/')) return json({ error: 'Not found' }, 404);
 			return new Response(null, { status: 404 });
@@ -290,6 +323,7 @@ export default {
 		// the daily cron is Clef's activity review (C-04); the 5-minute cron is sweeps
 		if (event.cron === DAILY_CRON) { ctx.waitUntil(runPatternReview(env).then((r) => console.log(JSON.stringify({ msg: 'clef.review', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'clef.review_failed', error: e instanceof Error ? e.message : String(e) })))); return; }
 		ctx.waitUntil(reconcilePayouts(env).then((r) => console.log(JSON.stringify({ msg: 'payout.reconcile', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'payout.reconcile_failed', error: e instanceof Error ? e.message : String(e) }))));
+		ctx.waitUntil(reconcileSwaps(env).then((r) => console.log(JSON.stringify({ msg: 'swap.reconcile', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'swap.reconcile_failed', error: e instanceof Error ? e.message : String(e) }))));
 		ctx.waitUntil(reconcileBuys(env).then((r) => console.log(JSON.stringify({ msg: 'buy.reconcile', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'buy.reconcile_failed', error: e instanceof Error ? e.message : String(e) }))));
 		ctx.waitUntil(checkStaleRefunds(env).catch((e) => console.error(JSON.stringify({ msg: 'refund.stale_check_failed', error: e instanceof Error ? e.message : String(e) }))));
 		ctx.waitUntil(checkFloat(env).catch((e) => console.error(JSON.stringify({ msg: 'payout.float_check_failed', error: e instanceof Error ? e.message : String(e) }))));

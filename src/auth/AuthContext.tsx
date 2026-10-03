@@ -19,6 +19,10 @@ export interface AuthState {
   canSend: (sym: string) => boolean;
   /** Sends `amount` of `sym` from the Relay wallet to `to`. Resolves with the transaction hash / signature. */
   sendAsset: (sym: string, to: string, amount: number) => Promise<string>;
+  /** Swaps: has the user authorised Relay's server (as a signer) on their wallet for this network? Always true in demo mode. */
+  swapReady: (net: Network) => boolean;
+  /** Asks the user, through Privy's consent sheet, to let Relay run swaps from this wallet. Resolves once it is done. */
+  enableSwaps: (net: Network) => Promise<void>;
   /** Opens Privy's full login modal (passkey, social, SMS/WhatsApp and wallet, as enabled in the dashboard). */
   openLogin: () => void;
   logout: () => Promise<void>;

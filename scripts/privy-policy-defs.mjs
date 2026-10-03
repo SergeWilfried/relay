@@ -203,3 +203,51 @@ export function buildUserPolicies({ denySets = {} } = {}) {
   }));
   return [...tiers, ...frozen];
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Override policy for Relay's SWAP SIGNER (the server key a customer authorises on their wallet, see scripts/privy-signer.mjs).
+// The signer exists to run swaps, so what could move value OUT is denied: key export, the `transfer` wallet action (which sends tokens to
+// any address; Relay never uses it), and ERC-20 `transfer` calls from the wallet (a swap approves and calls a router; it never sends a
+// token to an address). Everything else is allowed, because Privy doesn't say which method a swap is evaluated as (`swap` is not a policy
+// method) and an allowlist built on a guess would reject real swaps.
+// NOT VERIFIED: with no funds a policy denial can't be observed (Privy checks the balance first), so whether these rules fire on swap and
+// transfer actions is untested. Test one real swap AND one denied transfer on a funded test wallet before relying on this. A denied swap shows
+// up as `rejected`; if that happens, drop the policy id from the app config and swaps work again.
+// ---------------------------------------------------------------------------------------------------------------
+export function buildSwapSignerPolicies() {
+  const never = (method, name) => ({ name, method, conditions: [], action: 'DENY' });
+  // the `transfer` wallet action needs at least one condition: an amount of 0 or more matches every transfer
+  const noTransferAction = { name: 'No transfer action: swaps only', method: 'transfer', action: 'DENY', conditions: [{ field_source: 'action_request_body', field: 'source.amount', operator: 'gte', value: '0' }] };
+  const tokenTransfer = (name, token) => ({
+    name, method: 'eth_sendTransaction', action: 'DENY',
+    conditions: [
+      tx('to', 'eq', token),
+      { field_source: 'ethereum_calldata', field: 'function_name', abi: ERC20_TRANSFER_ABI, operator: 'eq', value: 'transfer' },
+    ],
+  });
+  return [
+    {
+      env: 'PRIVY_SWAP_POLICY_EVM',
+      body: {
+        version: '1.0', name: 'Relay swap signer (EVM)', chain_type: 'ethereum',
+        rules: [
+          allowAll,
+          never('exportPrivateKey', 'Never export the private key'), never('exportSeedPhrase', 'Never export the seed phrase'),
+          noTransferAction,
+          tokenTransfer('No USDT transfer calls', USDT), tokenTransfer('No USDC transfer calls', USDC),
+        ],
+      },
+    },
+    {
+      env: 'PRIVY_SWAP_POLICY_SOL',
+      body: {
+        version: '1.0', name: 'Relay swap signer (Solana)', chain_type: 'solana',
+        rules: [
+          allowAll,
+          never('exportPrivateKey', 'Never export the private key'), never('exportSeedPhrase', 'Never export the seed phrase'),
+          noTransferAction,
+        ],
+      },
+    },
+  ];
+}

@@ -98,7 +98,8 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     (side === 'from' ? setFrom : setTo)(a);
   };
 
-  const params = useMemo<QuoteParams>(() => ({ tab, from, to, provider, wallet: wallet.address, balance }), [tab, from, to, provider, wallet.address, balance]);
+  const { mode } = useAuth();
+  const params = useMemo<QuoteParams>(() => ({ tab, from, to, provider, wallet: wallet.address, balance, live: mode === 'privy' }), [tab, from, to, provider, wallet.address, balance, mode]);
 
   const value = useMemo<TradeState>(() => ({
     tab, amount, setAmount, from, to, setAsset, providerId, provider, wallet, setWallet, phone, setPhone, alias, setAlias, account,

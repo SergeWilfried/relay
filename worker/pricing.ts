@@ -61,3 +61,10 @@ export function buyQuote(asset: string, fcfa: number, decimals: number): BuyQuot
 	const amountUnits = (BigInt(net) * 10n ** BigInt(decimals) * 1_000_000n) / rateMicro;
 	return { fcfa, platformFeeFcfa, pspFeeFcfa, networkFeeFcfa: NETWORK_FEE_FCFA, amountUnits };
 }
+
+/** FCFA value of an amount of an asset at the app's reference rate (placeholder rates): for rules and reporting, never for what a customer receives. */
+export function fcfaValue(asset: string, amount: string): number {
+	const rate = FCFA_PER_UNIT[asset];
+	if (!rate) throw new Error(`No price for ${asset}`);
+	return Math.round(Number(amount) * rate);
+}

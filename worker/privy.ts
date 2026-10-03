@@ -4,6 +4,8 @@
  * logged (without secrets) and acknowledged rather than failing, because a non-2xx makes Privy retry.
  */
 import { applyDeposit } from './orders';
+import { settleSwap } from './swaps';
+import { txHashOf } from './swap/privy';
 
 type Json = Record<string, unknown>;
 
@@ -87,6 +89,21 @@ export async function handleEvent(env: Env, event: PrivyEvent, eventId: string):
       if (out.result === 'advanced' && !(str(event.sender) ?? str(event.from) ?? str(event.source))) log('warn', 'deposit.sender_unknown', { eventId, orderId: out.orderId }); // the denylist source check (A-01) could not run
       return;
     }
+    case 'wallet_action.swap.succeeded':
+    case 'wallet_action.swap.failed':
+    case 'wallet_action.swap.rejected': {
+      // Privy finished a swap we submitted: settle it by our own reference id (or the action id)
+      const status = event.type.endsWith('succeeded') ? 'succeeded' : event.type.endsWith('rejected') ? 'rejected' : 'failed';
+      const settled = await settleSwap(env, {
+        referenceId: str(event.reference_id) ?? null, actionId: str(event.wallet_action_id) ?? null, status,
+        outputUnits: str(event.output_amount) ?? null, txHash: txHashOf(event.steps), failure: str(obj(event.failure_reason).message) ?? null,
+      });
+      log('info', `privy.${event.type}`, { eventId, action: str(event.wallet_action_id), ref: str(event.reference_id), settled });
+      return;
+    }
+    case 'wallet_action.swap.created':
+      log('info', 'privy.wallet_action.swap.created', { eventId, action: str(event.wallet_action_id), ref: str(event.reference_id) });
+      return;
     case 'transaction.confirmed':
     case 'transaction.failed':
     case 'transaction.execution_reverted':

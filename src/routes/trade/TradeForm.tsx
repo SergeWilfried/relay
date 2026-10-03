@@ -127,6 +127,7 @@ export default function TradeForm() {
       {picker && (
         <AssetPicker
           selected={(picker === 'from' ? t.from : t.to).sym}
+          exclude={tab === 'swap' && auth.mode === 'privy' ? ['BTC'] : []}
           onPick={(a) => t.setAsset(picker, a)}
           onClose={() => setPicker(null)}
         />

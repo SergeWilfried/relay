@@ -47,6 +47,8 @@ export interface Order {
   /** latest status reported by the server for synced orders (null until the first sync) */
   /** purchases registered with the server: how the payment and the delivery stand */
   buy: import('./serverOrders').ServerBuy | null;
+  /** swaps run by Privy from the customer's own wallet: how the swap stands */
+  swap: import('./swapLive').ServerSwap | null;
   server: { status: 'awaiting_deposit' | 'processing' | 'underpaid'; payout: string | null; payoutError: string | null; note: string | null; hold?: string | null; refund?: { status: string; txHash: string | null } | null } | null;
 }
 
@@ -60,7 +62,7 @@ export function buildOrder(tab: Tab, from: Asset, to: Asset, provider: Provider 
     id, tab, from, to, provider: tab === 'swap' ? null : provider, wallet, quote, amount, hash,
     createdAt: keep?.createdAt ?? now, quoteExpiresAt: now + QUOTE_TTL_MS,
     submitted: false, awaitingDeposit: false, depositExpiresAt: null, startedAt: null, outcome: 'ok' as Outcome,
-    depositAddress: null as string | null, depositLive: false, depositTx: null as string | null, synced: false, phone: (opts?.phone ?? null) as string | null, server: null as Order['server'], buy: null as Order['buy'],
+    depositAddress: null as string | null, depositLive: false, depositTx: null as string | null, synced: false, phone: (opts?.phone ?? null) as string | null, server: null as Order['server'], buy: null as Order['buy'], swap: null as Order['swap'],
   };
   const gross = fmtInt(Math.round(quote.fcfaGross / 100) * 100);
   if (tab === 'swap') {
@@ -103,6 +105,12 @@ export interface Progress { phase: Phase; /** index of the active step (3 = all 
 /** Order progress is a pure function of time, so it survives reloads and leaving the screen. */
 export function deriveProgress(o: Order, now: number): Progress {
   // Orders registered with the server follow the server's payout status, not a timer.
+  if (o.synced && o.tab === 'swap') {
+    const w = o.swap;
+    if (!w || w.status === 'created' || w.status === 'submitted') return { phase: 'processing', step: 1 }; // submitted: running on-chain
+    if (w.status === 'succeeded') return { phase: 'done', step: 3 };
+    return { phase: 'failed', step: 1 };
+  }
   if (o.synced && o.tab === 'buy') {
     const b = o.buy;
     if (!b || b.status === 'created' || b.status === 'collecting') return { phase: 'awaiting_deposit', step: 0 }; // the customer is still paying

@@ -5,12 +5,12 @@ import { AssetChip } from './AssetChip';
 import { useT } from '../i18n';
 import { Sheet } from './Sheet';
 
-export function AssetPicker({ selected, onPick, onClose }: { selected: string; onPick: (a: Asset) => void; onClose: () => void }) {
+export function AssetPicker({ selected, onPick, onClose, exclude = [] }: { selected: string; onPick: (a: Asset) => void; onClose: () => void; /** symbols to leave out (e.g. BTC can't be swapped on-chain) */ exclude?: string[] }) {
   const { t } = useT();
   const balances = useBalances();
   return (
     <Sheet title={t('Select asset')} onClose={onClose}>
-      {ASSETS.map((a) => {
+      {ASSETS.filter((a) => !exclude.includes(a.sym)).map((a) => {
         const bal = balances.get(a.sym);
         return (
           <button key={a.sym} type="button" className={`opt${a.sym === selected ? ' on' : ''}`} aria-label={t('{sym} on {net}', { sym: a.sym, net: a.net })} onClick={() => { onPick(a); onClose(); }}>

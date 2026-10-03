@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Spinner } from '../../components/Spinner';
 import { StepList } from '../../components/StepList';
 import { SUPPORT_EMAIL } from '../../lib/data';
-import { fmtInt } from '../../lib/format';
+import { fmtInt, fmtRate } from '../../lib/format';
 import { useNow, useOnline } from '../../lib/net';
 import { deriveProgress, inFlight } from '../../lib/orders';
 import { tr, useT } from '../../i18n';
@@ -33,8 +33,13 @@ export default function Status() {
   // purchases registered with the server: the customer has paid; a person sends the crypto from the treasury
   const liveBuy = order.synced && order.tab === 'buy' && !!order.buy;
   const buy = order.buy;
+  // swaps run by Privy from the customer's own wallet: nothing to deposit or approve here, just the result
+  const liveSwap = order.synced && order.tab === 'swap' && !!order.swap;
+  const swap = order.swap;
   const shortWallet = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
-  const steps: [string, string][] = liveBuy
+  const steps: [string, string][] = liveSwap
+    ? [[t('Swap submitted'), order.quote.summaryFrom], [t('Running on-chain'), t('Executed from your own wallet')], [t('{sym} received', { sym: order.to.sym }), swap?.amountOut ? `${fmtRate(Number(swap.amountOut))} ${order.to.sym}` : order.quote.summaryTo]]
+    : liveBuy
     ? [[t('Payment received'), `${fmtInt(order.amount)} FCFA · ${order.provider?.name ?? ''}`], [t('Preparing your {sym}', { sym: order.from.sym }), t('Our team sends it from the treasury')], [t('{sym} sent', { sym: order.from.sym }), shortWallet(order.wallet)]]
     : live
     ? [[t('Deposit received'), t('{amount} confirmed on-chain', { amount: order.quote.summaryFrom })], [t('Payout review'), t('Our team checks and approves the payout')], [t('Sent to {provider}', { provider: order.provider?.name ?? t('mobile money') }), order.phone ?? '']]
@@ -62,9 +67,9 @@ export default function Status() {
       )}
       <div className="status-top" aria-live="polite">
         {done ? <div className="check">✓</div> : failed ? <div className="check bad">✕</div> : <Spinner large />}
-        <div className="status-t">{done ? order.doneTitle : failed ? (live ? t('Payout needs attention') : t("This didn't go through")) : reviewing ? t('Payout under review') : sendingBuy ? t('Sending your {sym}', { sym: order.from.sym }) : order.title}</div>
+        <div className="status-t">{done ? order.doneTitle : failed ? (live ? t('Payout needs attention') : t("This didn't go through")) : reviewing ? t('Payout under review') : sendingBuy ? t('Sending your {sym}', { sym: order.from.sym }) : liveSwap && !done && !failed ? t('Swapping…') : order.title}</div>
         <div className="status-s">
-          {done ? order.doneSub : failed ? t("Step {n} of 3 didn't complete · {amount}", { n: step + 1, amount: order.quote.summaryFrom }) : reviewing ? t('{amount} to {provider}', { amount: order.quote.summaryTo, provider: order.provider?.name ?? '' }) : sendingBuy ? t('{amount} to your wallet', { amount: order.quote.summaryTo }) : order.sub}
+          {done ? (liveSwap && swap?.amountOut ? t('{amount} in your wallet', { amount: `${fmtRate(Number(swap.amountOut))} ${order.to.sym}` }) : order.doneSub) : failed ? t("Step {n} of 3 didn't complete · {amount}", { n: step + 1, amount: order.quote.summaryFrom }) : reviewing ? t('{amount} to {provider}', { amount: order.quote.summaryTo, provider: order.provider?.name ?? '' }) : sendingBuy ? t('{amount} to your wallet', { amount: order.quote.summaryTo }) : order.sub}
         </div>
       </div>
 
@@ -103,12 +108,17 @@ export default function Status() {
           <div><Link to="/activity" className="notice-act">{t('Go to Activity')}</Link></div>
         </div>
       )}
+      {failed && liveSwap && (
+        <div className="notice warn" role="alert">
+          <b>{t("This swap didn't go through.")}</b> {swap?.failure ? `${tr(swap.failure)}. ` : ''}{t('Your funds are still in your wallet.')}
+        </div>
+      )}
       {failed && liveBuy && (
         <div className="notice warn" role="alert">
           <b>{t("This purchase didn't go through.")}</b> {buy?.failure ? `${tr(buy.failure)}. ` : ''}{t('Nothing was charged.')}
         </div>
       )}
-      {failed && !liveBuy && (
+      {failed && !liveBuy && !liveSwap && (
         <div className="notice warn" role="alert">
           {live
             ? underpaid
@@ -118,7 +128,9 @@ export default function Status() {
         </div>
       )}
 
-      {liveBuy
+      {liveSwap
+        ? swap?.txHash && <div className="hash">{swap.txHash.slice(0, 8)}…{swap.txHash.slice(-6)} · <a href={order.from.explorer + swap.txHash} target="_blank" rel="noreferrer">{t('view on explorer')}</a></div>
+        : liveBuy
         ? done && buy?.txHash && <div className="hash">{buy.txHash.slice(0, 8)}…{buy.txHash.slice(-6)} · <a href={order.from.explorer + buy.txHash} target="_blank" rel="noreferrer">{t('view on explorer')}</a></div>
         : <div className="hash">{txLabel} · <a href={explorer} target="_blank" rel="noreferrer">{t('view on explorer')}</a></div>}
 
