@@ -144,3 +144,21 @@ export interface AdminBuy {
 export const listBuys = () => call<{ buys: AdminBuy[] }>('/buys').then((r) => r.buys);
 export const markDelivered = (id: string, by: string, txHash: string) => call<AdminBuy>(`/buys/${id}/delivered`, 'POST', { by, txHash });
 export const releaseBuyHold = (id: string, by: string, note: string) => call<AdminBuy>(`/buys/${id}/release-hold`, 'POST', { by, note });
+
+export interface FloatRow {
+  country: string;
+  currency: string;
+  balance: number | null;
+  provider: string | null;
+  floor: number;
+  committedFcfa: number;
+  committedCount: number;
+  out24hFcfa: number;
+  in24hFcfa: number;
+  avgDailyOutFcfa: number;
+  coverDays: number | null;
+  status: 'ok' | 'low' | 'critical';
+  reasons: string[];
+}
+export interface FloatView { provider: string; floor: number; generatedAt: number; rows: FloatRow[] | null }
+export const getFloat = () => call<FloatView>('/payouts/float');

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { lowFloat, acceptsPayouts, assertSafeBase, normalizeBase, parseActiveConf, classifyStatus, createPawapayProvider, digestMatches, friendlyFailure, parsePhone, parseSignatureInput, payoutUuid, providerCode, verifyCallback } from '../worker/payout/pawapay.ts';
+import { acceptsPayouts, assertSafeBase, normalizeBase, parseActiveConf, classifyStatus, createPawapayProvider, digestMatches, friendlyFailure, parsePhone, parseSignatureInput, payoutUuid, providerCode, verifyCallback } from '../worker/payout/pawapay.ts';
 
 const B64 = (u: Uint8Array) => { let s = ''; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
 const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -283,15 +283,6 @@ test('supports: an amount outside the provider limits is refused up front (Orang
   assert.equal(await provider.supports!('orange', phone), true, 'no amount given: only availability is checked');
   const { provider: p2 } = setup(() => Response.json(sen({ minAmount: '100', maxAmount: '2000000' })));
   assert.equal(await p2.supports!('orange', phone, 50), 'This amount is outside the provider limits');
-});
-
-test('float: only the countries Relay pays in, in XOF, below the floor, are reported', () => {
-  const b = [
-    { country: 'BFA', currency: 'XOF', balance: 436_994 }, { country: 'CIV', currency: 'XOF', balance: 5_000_000 },
-    { country: 'SEN', currency: 'XOF', balance: 10_000 }, { country: 'BEN', currency: 'XOF', balance: 10 }, { country: 'KEN', currency: 'KES', balance: 1 },
-  ];
-  assert.deepEqual(lowFloat(b, 2_000_000).map((x) => x.country), ['BFA', 'SEN']);
-  assert.deepEqual(lowFloat(b, 2_000_000, ['CIV']), []);
 });
 
 test('balances: read from the wallet-balances answer, ignoring malformed rows', async () => {

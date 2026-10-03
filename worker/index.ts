@@ -3,7 +3,7 @@ import { BadRequest, createSellOrder, getOrder, listOrders } from './orders';
 import { BuyError, createBuyOrder, getBuy, listBuys, listBuysAdmin, markDelivered, payBuyOrder, reconcileBuys, releaseBuyHold, settle as settleBuy } from './buys';
 import { getDepositProvider } from './deposit';
 import { approveRefund, cancelRefund, checkStaleRefunds, createRefund, listEligible, listRefunds, markRefundSent, RefundError } from './refunds';
-import { FLOAT_FLOOR_XOF, checkFloat, reconcilePayouts, approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
+import { checkFloat, loadFloat, reconcilePayouts, approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
 import { getProvider } from './payout';
 import { ensureProfile, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
 import { revenueReport } from './revenue';
@@ -109,8 +109,8 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 	}
 
 	if (pathname === '/api/admin/payouts/float' && request.method === 'GET') {
-		const balances = await getProvider(env).balances?.();
-		return json({ provider: getProvider(env).name, balances: balances ?? null, floorXof: FLOAT_FLOOR_XOF });
+		try { return json(await loadFloat(env)); }
+		catch (e) { return json({ error: `Could not read the balances from the payment provider: ${e instanceof Error ? e.message : String(e)}` }, 502); }
 	}
 	if (pathname === '/api/admin/payouts/reconcile' && request.method === 'POST') return json(await reconcilePayouts(env));
 	if (pathname === '/api/admin/lists' && request.method === 'GET') return json({ entries: await listEntries(env, url.searchParams.get('kind') ?? undefined) });

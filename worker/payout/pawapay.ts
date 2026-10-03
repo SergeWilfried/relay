@@ -56,11 +56,6 @@ export function parseActiveConf(body: unknown): Map<string, ProviderConf> {
 /** OPERATIONAL and DELAYED (payouts are queued) can take new payouts; CLOSED and anything unknown cannot. */
 export const acceptsPayouts = (c: ProviderConf | undefined) => !!c && (c.status === 'OPERATIONAL' || c.status === 'DELAYED');
 
-/** Pure: the countries Relay pays in whose wallet is below the floor (the matrix's B-02: mobile money float under 2 000 000 XOF). */
-export function lowFloat(balances: FloatBalance[], floor: number, countries = ['CIV', 'SEN', 'BFA']): FloatBalance[] {
-	return balances.filter((b) => countries.includes(b.country) && b.currency === 'XOF' && b.balance < floor);
-}
-
 // ---- idempotency id ---------------------------------------------------------------------------------------------------
 
 /** Deterministic UUIDv4-shaped id from our payout id (pawaPay requires a UUIDv4): the same payout always maps to the same id. */

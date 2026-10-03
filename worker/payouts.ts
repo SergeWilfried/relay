@@ -1,6 +1,6 @@
 import { notify } from './notify';
 import { holdActive } from './orders';
-import { lowFloat } from './payout/pawapay';
+import { floatReport, type BuyFlow, type FloatRow, type PayoutFlow } from './float';
 import { getProvider } from './payout';
 
 export type PayoutStatus = 'pending_approval' | 'approved' | 'sending' | 'paid' | 'failed' | 'rejected';
@@ -160,19 +160,37 @@ export async function reconcilePayouts(env: Env): Promise<{ checked: number; set
 export const FLOAT_FLOOR_XOF = 2_000_000;
 const FLOAT_ALERT_EVERY_SECONDS = 12 * 3600;
 
+export interface FloatView { provider: string; floor: number; generatedAt: number; rows: FloatRow[] | null }
+
+/** The float per country with what is committed against it. `rows` is null when the provider doesn't report a balance (the sandbox provider). */
+export async function loadFloat(env: Env, now = Date.now()): Promise<FloatView> {
+	const provider = getProvider(env);
+	if (!provider.balances) return { provider: provider.name, floor: FLOAT_FLOOR_XOF, generatedAt: now, rows: null };
+	const since = now - 7 * 86_400_000;
+	const [balances, payouts, buys] = await Promise.all([
+		provider.balances(),
+		env.DB.prepare(`SELECT phone, amount_fcfa, status, paid_at FROM payouts WHERE status IN ('pending_approval', 'approved', 'sending') OR (status = 'paid' AND paid_at >= ?)`).bind(since).all<PayoutFlow>(),
+		env.DB.prepare(`SELECT phone, fcfa, collected_at FROM buy_orders WHERE status IN ('collected', 'delivered') AND collected_at >= ?`).bind(now - 86_400_000).all<BuyFlow>(),
+	]);
+	return { provider: provider.name, floor: FLOAT_FLOOR_XOF, generatedAt: now, rows: floatReport({ balances, payouts: payouts.results, buys: buys.results, floor: FLOAT_FLOOR_XOF, now }) };
+}
+
 /**
- * Alerts when a country's prepaid wallet with the payout provider is below the floor, at most once per 12 hours per country.
- * A payout fails with "wallet out of funds" when the wallet of ITS country is empty, so a top-up has to be per country.
+ * Alerts when a country's float is below the minimum or doesn't cover the payouts already waiting, at most once per 12 hours per country
+ * and kind. A payout fails with "wallet out of funds" when the wallet of ITS country is empty, so a top-up has to be per country.
  */
 export async function checkFloat(env: Env): Promise<{ low: string[] }> {
-	const provider = getProvider(env);
-	if (!provider.balances) return { low: [] };
-	const low = lowFloat(await provider.balances(), FLOAT_FLOOR_XOF);
-	for (const b of low) {
-		const key = `float:alert:${b.country}`;
+	const view = await loadFloat(env);
+	const low = (view.rows ?? []).filter((r) => r.status !== 'ok');
+	for (const r of low) {
+		const key = `float:alert:${r.country}:${r.status}`;
 		if (await env.EVENTS.get(key)) continue;
 		await env.EVENTS.put(key, String(Date.now()), { expirationTtl: FLOAT_ALERT_EVERY_SECONDS });
-		await notify(env, { level: 'critical', title: `Payout wallet low in ${b.country}: payouts there will fail until it is topped up`, details: { country: b.country, balance: `${b.balance} ${b.currency}`, floor: `${FLOAT_FLOOR_XOF} ${b.currency}` } });
+		await notify(env, {
+			level: 'critical',
+			title: r.status === 'critical' ? `Payout wallet in ${r.country} cannot cover payouts: they will fail until it is topped up` : `Payout wallet low in ${r.country}: top it up before it runs out`,
+			details: { country: r.country, balance: r.balance === null ? 'no wallet' : `${r.balance} XOF`, committed: `${r.committedFcfa} XOF in ${r.committedCount} payout(s)`, floor: `${r.floor} XOF`, coverDays: r.coverDays ?? 'n/a', why: r.reasons.join('; ') },
+		});
 	}
-	return { low: low.map((b) => b.country) };
+	return { low: low.map((r) => r.country) };
 }
