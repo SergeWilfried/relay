@@ -93,6 +93,7 @@ export async function createBuyOrder(env: Env, userId: string, input: CreateBuyI
 	if (!asset) throw new BuyError('Unsupported asset');
 	const fcfa = input.amountFcfa;
 	if (typeof fcfa !== 'number' || !Number.isInteger(fcfa) || fcfa < MIN_FCFA) throw new BuyError('Amount is below the minimum');
+	if (input.providerId === 'pispi') throw new BuyError('Buying with PI-SPI is not available yet'); // PI-SPI is alias-based and the payment provider doesn't collect through it
 	const operator = typeof input.providerId === 'string' && OPERATORS.has(input.providerId) ? input.providerId : null;
 	if (!operator) throw new BuyError('Choose a mobile money provider');
 	const phone = typeof input.phone === 'string' ? input.phone.replace(/[\s\-()]/g, '') : '';

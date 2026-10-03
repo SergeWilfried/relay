@@ -1,15 +1,19 @@
 /**
  * Recipient denylist. Three kinds of entries:
  *  - phone  : a payout number. Rule R-08 refuses a new sell order whose payout goes to a listed number.
+ *  - alias  : a PI-SPI alias (the alias-based payment system): the same rule, matched case-insensitively.
  *  - evm / solana : a blockchain address. (1) A deposit that arrives FROM a listed address is held (rule A-01): the payout can't be
  *    approved and the funds are not swept to the treasury. (2) The address is mirrored into a Privy condition set, which the
  *    user-wallet policies reference (`in_condition_set`) to deny transfers TO it. See scripts/privy-policy-defs.mjs.
  * Allowlists are deliberately not enforced here: see the README ("Allowlists").
  */
-export type ListKind = 'phone' | 'evm' | 'solana';
+export type ListKind = 'phone' | 'alias' | 'evm' | 'solana';
 export interface ListRow { id: number; list: string; kind: ListKind; value: string; note: string; added_by: string | null; created_at: number; privy_item_id: string | null }
 
 const PHONE = /^\+\d{8,15}$/;
+/** The same rule as src/lib/account.ts (test/account.test.ts keeps them equal). */
+export const ALIAS_RE = /^[A-Za-z0-9+][A-Za-z0-9._@+-]{2,63}$/;
+export const isAlias = (v: unknown): v is string => typeof v === 'string' && ALIAS_RE.test(v.trim());
 const EVM = /^0x[0-9a-fA-F]{40}$/;
 const SOL = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -18,6 +22,7 @@ export function normalizeEntry(kind: string, raw: unknown): string | null {
 	if (typeof raw !== 'string') return null;
 	const v = raw.trim();
 	if (kind === 'phone') { const p = v.replace(/[\s\-()]/g, ''); return PHONE.test(p) ? p : null; }
+	if (kind === 'alias') return ALIAS_RE.test(v) ? v.toLowerCase() : null; // aliases are matched case-insensitively
 	if (kind === 'evm') return EVM.test(v) ? v.toLowerCase() : null;
 	if (kind === 'solana') return SOL.test(v) ? v : null;
 	return null;
@@ -80,10 +85,10 @@ export class ListError extends Error {}
 /** Adds an entry (idempotent) and mirrors addresses to Privy. The entry is enforced locally even if the Privy sync fails. */
 export async function addEntry(env: Env, kind: string, rawValue: unknown, note: string, by: string): Promise<{ entry: ListRow; sync: Sync }> {
 	const value = normalizeEntry(kind, rawValue);
-	if (!value) throw new ListError(`Not a valid ${kind === 'phone' ? 'phone number (+ and country code)' : kind === 'evm' ? 'EVM address (0x…)' : kind === 'solana' ? 'Solana address' : 'entry'}`);
+	if (!value) throw new ListError(`Not a valid ${kind === 'phone' ? 'phone number (+ and country code)' : kind === 'alias' ? 'PI-SPI alias (3 to 64 letters, digits or . _ @ + -)' : kind === 'evm' ? 'EVM address (0x…)' : kind === 'solana' ? 'Solana address' : 'entry'}`);
 	await env.DB.prepare(`INSERT OR IGNORE INTO recipient_lists (list, kind, value, note, added_by, created_at) VALUES ('deny', ?, ?, ?, ?, ?)`).bind(kind, value, note, by, Date.now()).run();
 	let entry = (await env.DB.prepare(`SELECT * FROM recipient_lists WHERE list = 'deny' AND kind = ? AND value = ?`).bind(kind, value).first<ListRow>())!;
-	if (kind === 'phone') return { entry, sync: { synced: false, reason: 'phone numbers are enforced by Relay only (not mirrored to Privy)' } };
+	if (kind === 'phone' || kind === 'alias') return { entry, sync: { synced: false, reason: 'phone numbers and aliases are enforced by Relay only (not mirrored to Privy)' } };
 	if (entry.privy_item_id) return { entry, sync: { synced: true, itemId: entry.privy_item_id } };
 	const sync = await pushToPrivy(env, kind as ListKind, value);
 	if (sync.synced && sync.itemId) {

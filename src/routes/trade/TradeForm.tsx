@@ -11,7 +11,8 @@ import { useQuote } from '../../lib/api';
 import { useOnline } from '../../lib/net';
 import { shortAddr } from '../../lib/quote';
 import { WalletSheet } from '../../components/WalletSheet';
-import { PhoneSheet, validPhone } from '../../components/PhoneSheet';
+import { AccountSheet } from '../../components/AccountSheet';
+import { usesAlias, validAccount } from '../../lib/account';
 import { useAuth } from '../../auth/AuthContext';
 import { useT } from '../../i18n';
 import { useFcfaAvatar } from '../../lib/geo';
@@ -52,7 +53,8 @@ export default function TradeForm() {
   const zero = parseAmount(t.amount) <= 0;
   // buying to a network where the user has no wallet (e.g. Bitcoin) needs an address first
   // live payouts go to a number the user typed; demo mode falls back to the placeholder number
-  const needPhone = tab !== 'swap' && auth.mode === 'privy' && t.amountOk && !!t.provider && !(t.phone && validPhone(t.phone));
+  const byAlias = usesAlias(t.provider);
+  const needPhone = tab !== 'swap' && auth.mode === 'privy' && t.amountOk && !!t.provider && !validAccount(t.provider, t.account);
   const needWallet = tab === 'buy' && !!t.wallet.missing && t.amountOk && !!t.provider;
   // transaction limits (see lib/limits.ts): checked against the FCFA value of this order
   const breach = zero ? null : limits.check(q.fcfaGross);
@@ -61,7 +63,7 @@ export default function TradeForm() {
     : breach.kind === 'daily' ? tl('Daily limit: {amount} FCFA left today', { amount: fmtInt(breach.remaining) })
     : tl('Monthly limit: {amount} FCFA left this month', { amount: fmtInt(breach.remaining) });
   const reviewLabel = tl(CTA_KEY[tab]);
-  const cta = !online ? tl("You're offline") : failed ? tl('Quote unavailable') : q.insufficient && !zero ? tl('Insufficient balance') : breach ? tl('Exceeds your limit') : needAmt ? tl('Confirm amount') : needProv ? tl('Choose a provider') : needPhone ? tl('Add your mobile money number') : needWallet ? tl('Add receiving address') : reviewLabel;
+  const cta = !online ? tl("You're offline") : failed ? tl('Quote unavailable') : q.insufficient && !zero ? tl('Insufficient balance') : breach ? tl('Exceeds your limit') : needAmt ? tl('Confirm amount') : needProv ? tl('Choose a provider') : needPhone ? (byAlias ? tl('Add your PI-SPI alias') : tl('Add your mobile money number')) : needWallet ? tl('Add receiving address') : reviewLabel;
   const disabled = !!breach || needPhone || needWallet || !online || failed || zero || stale || q.insufficient || needProv;
 
   const crypto = (a: Asset): { sym: string; net: string; char: string; color: string; logo?: string; badge?: string; onClick?: () => void } => ({ sym: a.sym, net: a.net, char: a.char, color: a.color, logo: a.logo, badge: NETWORK_LOGO[a.net] });
@@ -107,11 +109,11 @@ export default function TradeForm() {
       {showPay && t.provider && (
         <>
           {tab === 'sell' ? (
-            <FieldRow label={tl('Cash out to mobile money number')} value={t.phone ?? (auth.mode === 'privy' ? tl('Add your number') : t.provider.number)} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
+            <FieldRow label={byAlias ? tl('Cash out to alias') : tl('Cash out to mobile money number')} value={t.account ?? (auth.mode === 'privy' ? (byAlias ? tl('Add your alias') : tl('Add your number')) : t.provider.number)} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
           ) : auth.mode === 'privy' ? (
-            <FieldRow label={tl('Pay from mobile money number')} value={t.phone ?? tl('Add your number')} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
+            <FieldRow label={byAlias ? tl('Pay from alias') : tl('Pay from mobile money number')} value={t.account ?? (byAlias ? tl('Add your alias') : tl('Add your number'))} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
           ) : (
-            <FieldRow label={tl('Mobile money number')} value={t.provider.number} hint={t.provider.name} />
+            <FieldRow label={byAlias ? tl('PI-SPI alias') : tl('Mobile money number')} value={t.provider.number} hint={t.provider.name} />
           )}
           {tab === 'buy' && <FieldRow label={tl('Receiving wallet')} value={t.wallet.missing ? tl('Add a {net} address', { net: t.from.net }) : shortAddr(t.wallet.address)} hint={t.wallet.custom ? tl('Custom') : t.from.net} onClick={() => setWalletOpen(true)} />}
         </>
@@ -120,7 +122,7 @@ export default function TradeForm() {
       <div className="agree">{tl('By clicking “{action}”, you agree to the', { action: reviewLabel })} <a href="#terms">{tl('User Agreement')}</a>.</div>
       <button className="btn" disabled={disabled && !needAmt} onClick={go}>{cta}</button>
 
-      {phoneOpen && t.provider && <PhoneSheet operator={t.provider.name} current={t.phone} onSave={t.setPhone} onClose={() => setPhoneOpen(false)} />}
+      {phoneOpen && t.provider && <AccountSheet operator={t.provider.name} alias={byAlias} current={t.account} onSave={byAlias ? t.setAlias : t.setPhone} onClose={() => setPhoneOpen(false)} />}
       {walletOpen && <WalletSheet net={t.from.net} current={t.wallet} onPick={t.setWallet} onClose={() => setWalletOpen(false)} />}
       {picker && (
         <AssetPicker

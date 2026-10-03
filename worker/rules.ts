@@ -206,7 +206,7 @@ export async function setUserStatus(env: Env, userId: string, status: 'normal' |
 	console.log(JSON.stringify({ msg: 'rules.user_status', user: userId, status, note }));
 }
 
-export async function loadFacts(env: Env, userId: string, input: { amountFcfa: number; phone: string; country: string | null }, profile: Profile, now: number): Promise<BaseFacts> {
+export async function loadFacts(env: Env, userId: string, input: { amountFcfa: number; phone: string; country: string | null; /** a PI-SPI alias is checked against the alias denylist, case-insensitively */ kind?: 'phone' | 'alias' }, profile: Profile, now: number): Promise<BaseFacts> {
 	const w = windowStarts(now);
 	const usage = await env.DB.prepare(
 		`SELECT
@@ -236,7 +236,7 @@ export async function loadFacts(env: Env, userId: string, input: { amountFcfa: n
 		prior_near_limit_7d: near?.n ?? 0,
 		clef_flag_active: profile.clefFlag,
 		// inline (not worker/lists.ts) so this file stays free of imports and testable in plain Node
-		payout_number_denied: !!(await env.DB.prepare(`SELECT 1 AS hit FROM recipient_lists WHERE list = 'deny' AND kind = 'phone' AND value = ?`).bind(input.phone).first()),
+		payout_number_denied: !!(await env.DB.prepare(`SELECT 1 AS hit FROM recipient_lists WHERE list = 'deny' AND kind = ? AND value = ?`).bind(input.kind ?? 'phone', input.kind === 'alias' ? input.phone.toLowerCase() : input.phone).first()),
 	};
 }
 

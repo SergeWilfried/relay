@@ -2,7 +2,7 @@ import { normalizeAddress, SELL_ASSETS, toUnits } from './assets';
 import { notify } from './notify';
 import { getProvider } from './payout';
 import { createDepositWallet } from './depositWallet';
-import { isDenied, kindOfChain } from './lists';
+import { isAlias, isDenied, kindOfChain } from './lists';
 import { sellQuote } from './pricing';
 import { BUY_COUNTED, COUNTED, ensureProfile, evaluate, loadFacts, loadModes, logDecision, RuleDenied, windowStarts, type Outcome } from './rules';
 
@@ -74,9 +74,12 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 	if (!asset) throw new BadRequest('Unsupported asset');
 	if (!AMOUNT.test(amount) || Number(amount) <= 0 || Number(amount) > MAX_AMOUNT) throw new BadRequest('Invalid amount');
 	const operator = typeof input.providerId === 'string' && OPERATORS.has(input.providerId) ? input.providerId : null;
-	const phone = typeof input.phone === 'string' ? input.phone.replace(/[\s\-()]/g, '') : '';
+	// the payout account: a mobile money number (E.164), or for PI-SPI (alias-based) the customer's alias. Stored in `phone` either way.
+	const byAlias = operator === 'pispi';
+	const raw = typeof input.phone === 'string' ? input.phone : '';
+	const phone = byAlias ? raw.trim() : raw.replace(/[\s\-()]/g, '');
 	if (!operator) throw new BadRequest('Choose a mobile money provider');
-	if (!PHONE.test(phone)) throw new BadRequest('Enter your mobile money number with the country code, e.g. +2250789458900');
+	if (byAlias ? !isAlias(phone) : !PHONE.test(phone)) throw new BadRequest(byAlias ? 'Enter your PI-SPI alias' : 'Enter your mobile money number with the country code, e.g. +2250789458900');
 
 	const existing = await env.DB.prepare(`${SELECT_ORDER} WHERE o.id = ?`).bind(id).first<OrderRow>();
 	if (existing) {
@@ -92,7 +95,7 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 	const refusal = await getProvider(env).supports?.(operator, phone, amountFcfa);
 	if (typeof refusal === 'string') throw new BadRequest(refusal);
 	const profile = await ensureProfile(env, userId, country, now);
-	const facts = await loadFacts(env, userId, { amountFcfa, phone, country }, profile, now);
+	const facts = await loadFacts(env, userId, { amountFcfa, phone, country, kind: byAlias ? 'alias' : 'phone' }, profile, now);
 	const outcome = evaluate(facts, { modes: await loadModes(env) });
 	if (outcome.action === 'deny') return deny(env, userId, id, outcome);
 
@@ -116,7 +119,7 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 		hold ? JSON.stringify(hold.ruleIds) : null, hold ? hold.message : null, hold && hold.hours !== null ? now + hold.hours * 3_600_000 : null).run();
 	if (ins.meta.changes === 0) {
 		// lost a race: re-read and report the limit that now applies
-		const again = evaluate(await loadFacts(env, userId, { amountFcfa, phone, country }, profile, now), { modes: await loadModes(env) });
+		const again = evaluate(await loadFacts(env, userId, { amountFcfa, phone, country, kind: byAlias ? 'alias' : 'phone' }, profile, now), { modes: await loadModes(env) });
 		const lost: Outcome & { action: 'deny' } = again.action === 'deny' ? again
 			: { action: 'deny', status: 422, message: 'Daily limit reached', ruleIds: ['R-04'], fired: again.fired, limits: again.limits, facts: again.facts };
 		return deny(env, userId, id, lost);

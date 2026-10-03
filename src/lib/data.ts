@@ -38,12 +38,14 @@ export interface Provider {
   number: string;
   /** logo under /public/providers; falls back to the lettered circle */
   logo?: string;
+  /** PI-SPI identifies the customer by an ALIAS, not a mobile money number */
+  alias?: boolean;
 }
 
 export const PROVIDERS: Provider[] = [
   { id: 'orange', name: 'Orange Money', char: 'O', color: '#FF7900', fg: '#fff', number: '+225 07 89 45 89', logo: '/providers/orange.png' },
   { id: 'wave', name: 'Wave', char: 'W', color: '#1DC8FF', fg: '#fff', number: '+225 05 55 01 22', logo: '/providers/wave-logo.png' },
-  { id: 'pispi', name: 'PI-SPI', char: 'π', color: '#FAB900', fg: '#1a1a1a', number: '+225 07 12 34 56', logo: '/providers/pispi.png' },
+  { id: 'pispi', name: 'PI-SPI', char: 'π', color: '#FAB900', fg: '#1a1a1a', number: 'mon.alias', logo: '/providers/pispi.png', alias: true },
   { id: 'moov', name: 'Moov Money', char: 'M', color: '#0066B3', fg: '#fff', number: '+225 01 02 33 48', logo: '/providers/moov.png' },
 ];
 

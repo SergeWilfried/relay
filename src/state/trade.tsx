@@ -21,9 +21,13 @@ interface TradeState {
   setProvider: (id: string) => void;
   wallet: Wallet;
   setWallet: (w: Wallet) => void;
-  /** mobile money number for sell payouts (E.164); null = not entered yet */
+  /** mobile money number (E.164) and, for PI-SPI, the customer's alias; null = not entered yet */
   phone: string | null;
   setPhone: (p: string) => void;
+  alias: string | null;
+  setAlias: (a: string) => void;
+  /** what the selected provider needs: the alias for PI-SPI, the number for the others */
+  account: string | null;
   amountOk: boolean;
   confirmAmount: () => void;
   switchTab: (t: Tab) => void;
@@ -60,6 +64,9 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   // live mode never pre-fills the placeholder numbers: a payout must go to a number the user typed
   const [phone, setPhoneState] = useState<string | null>(() => loadState<string | null>('phone', null));
   const setPhone = (p: string) => { setPhoneState(p); saveState('phone', p); };
+  // PI-SPI is alias-based: kept apart from the number so a number typed for another provider is never reused as an alias
+  const [alias, setAliasState] = useState<string | null>(() => loadState<string | null>('alias', null));
+  const setAlias = (a: string) => { setAliasState(a); saveState('alias', a); };
   const [draft, setDraft] = useState<Order | null>(() => loadState<Order | null>('draft', null));
   useEffect(() => { saveState('draft', draft); }, [draft]);
 
@@ -70,6 +77,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const wallet: Wallet = custom && custom.net === from.net ? { address: custom.address, custom: true } : own ? { address: own, custom: false } : { address: '', custom: false, missing: true };
   const setWallet = (w: Wallet) => setCustom(w.custom ? { address: w.address, net: from.net } : null);
   const provider = PROVIDERS.find((p) => p.id === providerId) ?? null;
+  const account = provider?.alias ? alias : phone;
 
   const switchTab = useCallback((t: Tab) => {
     setTab(t);
@@ -93,19 +101,19 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const params = useMemo<QuoteParams>(() => ({ tab, from, to, provider, wallet: wallet.address, balance }), [tab, from, to, provider, wallet.address, balance]);
 
   const value = useMemo<TradeState>(() => ({
-    tab, amount, setAmount, from, to, setAsset, providerId, provider, wallet, setWallet, phone, setPhone,
+    tab, amount, setAmount, from, to, setAsset, providerId, provider, wallet, setWallet, phone, setPhone, alias, setAlias, account,
     setProvider: (id: string) => { setProviderId(id); saveProvider(id); },
     amountOk, confirmAmount: () => setAmountOk(true),
     switchTab, params, balance, draft,
     lockDraft: (quote, n) => {
-      const o = buildOrder(tab, from, to, provider, quote, n, wallet.address, undefined, { phone: tab === 'swap' ? null : phone });
+      const o = buildOrder(tab, from, to, provider, quote, n, wallet.address, undefined, { phone: tab === 'swap' ? null : account });
       setDraft(o);
       return o;
     },
     requoteDraft: (quote) => setDraft((d) => (d ? buildOrder(d.tab, d.from, d.to, d.provider, quote, d.amount, d.wallet, { id: d.id, createdAt: d.createdAt }, { phone: d.phone }) : d)),
     clearDraft: () => setDraft(null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [tab, amount, from, to, providerId, provider, amountOk, draft, wallet.address, wallet.custom, phone, params, balance, switchTab]);
+  }), [tab, amount, from, to, providerId, provider, amountOk, draft, wallet.address, wallet.custom, phone, alias, params, balance, switchTab]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
