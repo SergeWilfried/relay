@@ -50,8 +50,8 @@ export const useTrade = () => {
 };
 
 export function TradeProvider({ children }: { children: ReactNode }) {
-  const [tab, setTab] = useState<Tab>('swap');
-  const [amount, setAmount] = useState(defaultAmount('swap'));
+  const [tab, setTab] = useState<Tab>('sell');
+  const [amount, setAmount] = useState(defaultAmount('sell'));
   const [from, setFrom] = useState<Asset>(ASSETS[0]);
   const [to, setTo] = useState<Asset>(ASSETS[1]);
   // last-used provider is preselected, which also skips the "Confirm amount" step

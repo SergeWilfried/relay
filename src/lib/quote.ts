@@ -115,5 +115,6 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
   };
 }
 
-export const defaultAmount = (tab: Tab) => (tab === 'buy' ? '1500000' : '1.5');
+/** Forms open empty: any pre-filled amount can be over a limit or the wallet balance, which would make the first screen an error. */
+export const defaultAmount = (_tab: Tab) => '';
 export const defaultAssets = (): { from: Asset; to: Asset } => ({ from: ETH, to: ASSETS[1] });

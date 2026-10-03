@@ -66,9 +66,9 @@
 .amt-val { margin-top: 4px; font-weight: 700; font-size: 22px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 input.amt-val { display: block; width: 100%; padding: 0; border: 0; outline: 0; background: transparent; }
 .amt-val.busy { opacity: .5; }
-.amt-sub { margin-top: 2px; font-size: 12px; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.amt-sub { margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--mut); text-wrap: pretty; }  /* wraps: a limit or error message must never be cut short */
 .amt-sub button { color: var(--acct); font-weight: 700; }
-.amt-sub.err { color: #D14343; }
+.amt-sub.err { color: var(--err); }
 .chip { flex: none; display: flex; align-items: center; gap: 10px; background: var(--ch); border: 1px solid var(--ln); border-radius: 12px; padding: 8px 10px 8px 8px; min-width: 124px; }
 button.chip { cursor: pointer; }
 .chip-dot { flex: none; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; color: #fff; }
@@ -119,7 +119,12 @@ button.chip { cursor: pointer; }
 
 .btn { display: block; width: 100%; background: var(--cta); color: var(--ctai); border-radius: 12px; padding: 15px 0; text-align: center; font-weight: 700; font-size: 14.5px; }
 .btn:hover { opacity: .88; }
-.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btn:disabled { background: var(--sh); color: var(--mut); cursor: not-allowed; }  /* a muted fill with a readable label, not a faded one: the label often says what to do next */
+.btn:disabled:hover { opacity: 1; }
+/* working, not unavailable: keep the button's own colors (the spinner is drawn for them) */
+.btn[aria-busy='true']:disabled { background: var(--cta); color: var(--ctai); opacity: .88; cursor: progress; }
+.btn.acc[aria-busy='true']:disabled { background: var(--acc); color: #fff; }
+.btn.sec[aria-busy='true']:disabled { background: var(--rw); color: var(--ink); }
 .btn.acc { background: var(--acc); color: #fff; }
 .btn.acc:hover { opacity: .9; }
 .btn.sec { background: var(--rw); color: var(--ink); padding: 14px 0; font-size: 14px; }
@@ -275,26 +280,25 @@ button.chip { cursor: pointer; }
 .btn-busy { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
 .spin.on-btn { width: 16px; height: 16px; border-color: color-mix(in srgb, currentColor 28%, transparent); border-top-color: currentColor; }
 .btn[aria-busy='true']:disabled { opacity: .75; cursor: progress; }
-.err-note { margin-top: 10px; padding: 11px 14px; border-radius: 12px; background: color-mix(in srgb, #D14343 12%, var(--bd)); color: #C43232; font-size: 12.5px; line-height: 1.45; text-align: left; }
-:root[data-theme='dark'] .err-note { color: #FF8B8B; }
+.err-note { margin-top: 10px; padding: 11px 14px; border-radius: 12px; background: color-mix(in srgb, var(--err-fill) 12%, var(--bd)); color: var(--err); font-size: 12.5px; line-height: 1.45; text-align: left; }
 .notice { margin: 0 0 12px; padding: 12px 14px; border-radius: 12px; background: var(--accs); font-size: 12.5px; line-height: 1.45; color: var(--ink); }
 .notice b { font-weight: 800; }
 .notice.warn { background: color-mix(in srgb, #E8A317 16%, var(--bd)); }
 .notice-act { margin-top: 8px; font-weight: 700; color: var(--acct); }
 .timer { margin: 12px 0 0; text-align: center; font-size: 12px; color: var(--mut); }
 .timer .bar { margin: 8px auto 0; height: 3px; max-width: 220px; border-radius: 3px; background: var(--ln); overflow: hidden; }
-.timer .bar i { display: block; height: 100%; background: var(--acc); transition: width 1s linear; }
-.timer.low { color: #C43232; }
-.timer.low .bar i { background: #D14343; }
-.step-n.failed { background: #D14343; border-color: #D14343; color: #fff; }
-.step-t.failed { color: #C43232; }
+.timer .bar i { display: block; width: 100%; height: 100%; background: var(--acc); transform-origin: left center; transition: transform 1s linear; }
+.timer.low { color: var(--err); }
+.timer.low .bar i { background: var(--err-fill); }
+.step-n.failed { background: var(--err-fill); border-color: var(--err-fill); color: #fff; }
+.step-t.failed { color: var(--err); }
 :root[data-theme='dark'] .step-t.failed { color: #FF8B8B; }
-.check.bad { background: #D14343; }
+.check.bad { background: var(--err-fill); }
 .status-actions { display: flex; flex-direction: column; gap: 8px; }
 .qlink { color: var(--acct); font-weight: 700; }
 .row-link { text-decoration: none !important; color: inherit; }
 .tag-s { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 10.5px; background: var(--accs); color: var(--acct); vertical-align: 1px; }
-.tag-s.bad { background: color-mix(in srgb, #D14343 14%, var(--bd)); color: #C43232; }
+.tag-s.bad { background: color-mix(in srgb, var(--err-fill) 14%, var(--bd)); color: var(--err); }
 .tag-s.ok { background: color-mix(in srgb, #22B07D 16%, var(--bd)); color: #138A5E; }
 :root[data-theme='dark'] .tag-s.bad { color: #FF8B8B; }
 :root[data-theme='dark'] .tag-s.ok { color: #4FD6A4; }
@@ -345,7 +349,35 @@ button.chip { cursor: pointer; }
 .limit-l { font-weight: 700; font-size: 12.5px; }
 .limit-v { font-size: 12.5px; color: var(--mut); white-space: nowrap; }
 .limit-bar { margin-top: 7px; height: 6px; border-radius: 999px; background: var(--ln); overflow: hidden; }
-.limit-bar i { display: block; height: 100%; border-radius: 999px; background: var(--acc); transition: width .3s; }
+.limit-bar i { display: block; width: 100%; height: 100%; background: var(--acc); transform-origin: left center; transition: transform .3s cubic-bezier(.25, 1, .5, 1); }  /* the track clips and rounds it */
 .limit-bar.high i { background: #E8A317; }
-.limit-bar.full i { background: #D14343; }
+.limit-bar.full i { background: var(--err-fill); }
 .limit-s { margin-top: 5px; font-size: 11.5px; color: var(--mut); }
+
+/* Deposit: the in-app send is the main path; the QR, address and manual check live under "Send from another wallet". */
+.dep-head { text-align: center; padding: 6px 0 14px; }
+.dep-head .dep-amt { font-weight: 800; font-size: 20px; }
+.dep-head .dep-sub { margin-top: 4px; font-size: 12.5px; color: var(--mut); display: flex; flex-wrap: wrap; justify-content: center; column-gap: 12px; }
+.dep-head .dep-sub span { white-space: nowrap; }
+.dep-head .dep-sub.low { color: var(--err); }
+.dep-more { margin-top: 14px; }
+.dep-more > summary { list-style: none; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 14px; background: var(--rw); font-weight: 700; font-size: 14px; cursor: pointer; }
+.dep-more > summary::-webkit-details-marker { display: none; }
+.dep-more > summary::after { content: ''; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .2s cubic-bezier(.25, 1, .5, 1); }
+.dep-more[open] > summary::after { transform: translateY(1px) rotate(-135deg); }
+.dep-more > summary:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.dep-more-body { padding-top: 10px; }
+
+/* Reduced motion: no transitions or movement. A spinner still has to say "working", so it pulses instead of rotating. */
+@keyframes rpulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+  .spin { animation: rpulse 1.6s ease-in-out infinite !important; }
+}
+
+/* Touch targets: at least 44px to tap, without changing how anything looks. */
+.avatar::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; }
+.ftab { min-height: 44px; }
+button.chip { min-height: 44px; }
+.logo { position: relative; }
+.logo::after { content: ''; position: absolute; inset: -9px -6px; }

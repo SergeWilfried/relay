@@ -30,7 +30,7 @@ export function WalletSheet({ net, current, onPick, onClose }: { net: string; cu
           placeholder={net === 'Solana' ? t('Solana address') : '0x…'} aria-label={t('{net} address', { net })} aria-invalid={showErr}
           value={v} onChange={(e) => setV(e.target.value)} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
       </div>
-      {showErr && <div className="note" style={{ color: '#D14343', margin: '6px 0 0', textAlign: 'left' }}>{t("That doesn't look like a valid {net} address.", { net })}</div>}
+      {showErr && <div className="note" style={{ color: 'var(--err)', margin: '6px 0 0', textAlign: 'left' }}>{t("That doesn't look like a valid {net} address.", { net })}</div>}
       <div className="note" style={{ textAlign: 'left' }}>{t("Double-check it — crypto sent to a wrong address can't be recovered.")}</div>
       <button className="btn" style={{ marginTop: 14 }} disabled={!ok} onClick={() => { onPick({ address: trimmed, custom: true }); onClose(); }}>{t('Use this address')}</button>
     </Sheet>

@@ -4,13 +4,16 @@
 
 :root {
   --pg: #ECEBEF; --sh: #E2E1E7; --bd: #FFFFFF; --rw: #F4F4F6; --ch: #FFFFFF;
-  --ink: #17151C; --mut: #625F6B; --fnt: #8A8794; --ln: rgba(23,21,28,.09);
+  --ink: #17151C; --mut: #625F6B; --fnt: #6B6874; --ln: rgba(23,21,28,.09);
+  /* error: --err is for TEXT (5.4:1 or better on every surface), --err-fill for bars, badges and icon discs */
+  --err: #B3261E; --err-fill: #D14343;
   --acc: #7B3FF2; --accs: #F1EBFF; --acct: #6A2FE0; --cta: #17151C; --ctai: #FFFFFF;
   color-scheme: light;
 }
 :root[data-theme='dark'] {
   --pg: #0D0C10; --sh: #1C1B22; --bd: #141318; --rw: #1F1E25; --ch: #2A2932;
-  --ink: #F3F2F6; --mut: #A3A0AD; --fnt: #7A7785; --ln: rgba(255,255,255,.08);
+  --ink: #F3F2F6; --mut: #A3A0AD; --fnt: #948FA0; --ln: rgba(255,255,255,.08);
+  --err: #FF8B8B; --err-fill: #D14343;
   --acc: #8F5CFF; --accs: rgba(143,92,255,.18); --acct: #B597FF; --cta: #F3F2F6; --ctai: #141318;
   color-scheme: dark;
 }

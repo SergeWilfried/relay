@@ -21,13 +21,13 @@ export function KycIntro({ onBack, onStart, title, compact }: { onBack: () => vo
       </div>
       {!compact && (
         <div className="steps" style={{ margin: '18px 6px' }}>
-          {[['Government ID', "National ID, passport or driver's licence"], ['Selfie', 'Quick face match — no video call'], ['~2 minutes', 'Most checks clear instantly']].map(([title, d], i) => (
+          {[['Government ID', "National ID, passport or driver's licence"], ['Selfie', 'Quick face match — no video call']].map(([title, d], i) => (
             <div className="step" key={title}><div className="step-n">{i + 1}</div><div><div className="step-t">{t(title!)}</div><div className="step-d">{t(d!)}</div></div></div>
           ))}
         </div>
       )}
-      <button className="btn acc" style={compact ? { marginTop: 14 } : undefined} onClick={onStart}>{t('Verify my identity')}</button>
-      {!compact && <div className="note">{t('Required once · your quote stays locked')}</div>}
+      <button className="btn" style={compact ? { marginTop: 14 } : undefined} onClick={onStart}>{t('Verify my identity')}</button>
+      {!compact && <div className="note">{t('About 2 minutes, usually instant. The rate is refreshed when you come back.')}</div>}
     </>
   );
 }
@@ -96,7 +96,7 @@ export function KycSdk({ onApproved }: { onApproved: () => void }) {
           <div><a className="notice-act" href={VERIFY_PATH} target="_blank" rel="noreferrer">{t('Reopen the verification tab')}</a></div>
         </div>
       )}
-      <button className="btn acc" style={{ marginTop: 14 }} onClick={open}>
+      <button className="btn" style={{ marginTop: 14 }} onClick={open}>
         {phase === 'waiting' ? t('Open it again') : t('Open verification in a new tab')}
       </button>
     </>

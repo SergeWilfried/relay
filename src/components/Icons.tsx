@@ -1,11 +1,6 @@
 import type { SVGProps } from 'react';
 const s = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
 
-export const MenuGrid = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden>
-    {[3, 9, 15].flatMap((y) => [3, 9, 15].map((x) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.6" />))}
-  </svg>
-);
 export const Chevron = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M3.5 5.25 7 8.75l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );

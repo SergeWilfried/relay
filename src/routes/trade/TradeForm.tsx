@@ -42,7 +42,7 @@ export default function TradeForm() {
   // live quote: debounced, fetched from the quote API, with loading/error states
   const { quote: q, status, stale, retry } = useQuote(t.params, t.amount);
   const online = useOnline();
-  if (!isTab(param)) return <Navigate to="/trade/swap" replace />;
+  if (!isTab(param)) return <Navigate to="/trade/sell" replace />;
   if (!ready) return null;
 
   const tab = t.tab;
@@ -63,8 +63,10 @@ export default function TradeForm() {
     : breach.kind === 'daily' ? tl('Daily limit: {amount} FCFA left today', { amount: fmtInt(breach.remaining) })
     : tl('Monthly limit: {amount} FCFA left this month', { amount: fmtInt(breach.remaining) });
   const reviewLabel = tl(CTA_KEY[tab]);
-  const cta = !online ? tl("You're offline") : failed ? tl('Quote unavailable') : q.insufficient && !zero ? tl('Insufficient balance') : breach ? tl('Exceeds your limit') : needAmt ? tl('Confirm amount') : needProv ? tl('Choose a provider') : needPhone ? (byAlias ? tl('Add your PI-SPI alias') : tl('Add your mobile money number')) : needWallet ? tl('Add receiving address') : reviewLabel;
-  const disabled = !!breach || needPhone || needWallet || !online || failed || zero || stale || q.insufficient || needProv;
+  const cta = !online ? tl("You're offline") : zero ? tl('Enter an amount') : failed ? tl('Quote unavailable') : q.insufficient && !zero ? tl('Insufficient balance') : breach ? tl('Exceeds your limit') : needAmt ? tl('Confirm amount') : needProv ? tl('Choose a provider') : needPhone ? (byAlias ? tl('Add your PI-SPI alias') : tl('Add your mobile money number')) : needWallet ? tl('Add receiving address') : reviewLabel;
+  // these block the button even on the "Confirm amount" step: an amount that is empty, over a limit or unaffordable must not move forward
+  const blocked = zero || !!breach || !online || failed || stale || q.insufficient;
+  const disabled = zero || !!breach || needPhone || needWallet || !online || failed || zero || stale || q.insufficient || needProv;
 
   const crypto = (a: Asset): { sym: string; net: string; char: string; color: string; logo?: string; badge?: string; onClick?: () => void } => ({ sym: a.sym, net: a.net, char: a.char, color: a.color, logo: a.logo, badge: NETWORK_LOGO[a.net] });
   const fcfa = (net: string) => ({ sym: 'FCFA', net, char: 'F', color: FCFA_COLOR, logo: fcfaAvatar.logo, badge: t.provider?.logo });
@@ -74,7 +76,7 @@ export default function TradeForm() {
   const toChip = tab === 'sell' ? fcfa(provNet) : { ...crypto(tab === 'swap' ? t.to : t.from), onClick: () => setPicker(tab === 'swap' ? 'to' : 'from') };
 
   const go = () => {
-    if (disabled && !needAmt) return;
+    if (blocked || (disabled && !needAmt)) return;
     if (needAmt) { t.confirmAmount(); return; }
     t.lockDraft(q, parseAmount(t.amount));
     nav('/trade/review');
@@ -99,7 +101,7 @@ export default function TradeForm() {
       <RateTimeline rate={q.rate} fee={q.fee} />
       <AmountRow
         label={tab === 'sell' ? tl('You get') : tl('You receive')} chip={toChip} busy={stale && !failed}
-        display={failed ? '—' : q.toAmt} subError={failed}
+        display={failed || zero ? '—' : q.toAmt} subError={failed}
         sub={failed ? <>{tl("Couldn't get a quote")} · <button type="button" onClick={retry}>{tl('Retry')}</button></> : q.toSub}
       />
 
@@ -119,8 +121,8 @@ export default function TradeForm() {
         </>
       )}
 
-      <div className="agree">{tl('By clicking “{action}”, you agree to the', { action: reviewLabel })} <a href="#terms">{tl('User Agreement')}</a>.</div>
-      <button className="btn" disabled={disabled && !needAmt} onClick={go}>{cta}</button>
+      <div className="agree">{tl('By continuing, you agree to the')} <a href="#terms">{tl('User Agreement')}</a>.</div>
+      <button className="btn" disabled={blocked || (disabled && !needAmt)} onClick={go}>{cta}</button>
 
       {phoneOpen && t.provider && <AccountSheet operator={t.provider.name} alias={byAlias} current={t.account} onSave={byAlias ? t.setAlias : t.setPhone} onClose={() => setPhoneOpen(false)} />}
       {walletOpen && <WalletSheet net={t.from.net} current={t.wallet} onPick={t.setWallet} onClose={() => setWalletOpen(false)} />}

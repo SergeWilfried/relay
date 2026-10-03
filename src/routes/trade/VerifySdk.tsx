@@ -7,7 +7,7 @@ export default function VerifySdk() {
   const nav = useNavigate();
   const { setVerified } = useApp();
   const { draft } = useTrade();
-  if (!draft) return <Navigate to="/trade/swap" replace />;
+  if (!draft) return <Navigate to="/trade/sell" replace />;
   // back to the review screen, which submits the order (it owns the quote timer and the error handling)
   return <KycSdk onApproved={() => { setVerified(); nav('/trade/review', { replace: true, state: { confirm: true } }); }} />;
 }

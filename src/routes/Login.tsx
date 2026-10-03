@@ -13,8 +13,8 @@ export default function Login() {
   const { t } = useT();
   const { state } = useLocation() as { state: { from?: string } | null };
   if (!ready) return <Splash />;
-  if (authenticated) return <Navigate to={state?.from && state.from !== '/login' ? state.from : '/trade/swap'} replace />;
-  if (mode === 'demo') return <Navigate to="/trade/swap" replace />;
+  if (authenticated) return <Navigate to={state?.from && state.from !== '/login' ? state.from : '/trade/sell'} replace />;
+  if (mode === 'demo') return <Navigate to="/trade/sell" replace />;
 
   return (
     <div className="login">

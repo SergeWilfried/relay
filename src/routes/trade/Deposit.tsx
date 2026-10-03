@@ -80,6 +80,30 @@ export default function Deposit() {
     nav(`/trade/status/${order.id}`, { replace: true });
   });
   const cancel = () => { removeOrder(order.id); nav('/trade/sell', { replace: true }); };
+  // customers who hold the funds in their Relay wallet need one button; the QR and address are for sending from elsewhere
+  const inAppFirst = canSendInApp;
+  const qrBlock = (
+    <>
+      <div className="qrwrap">
+            <div className="qr">{qr ? <img src={qr} alt={t('QR code for {addr}', { addr })} /> : <span style={{ font: '600 11px Figtree', color: 'var(--fnt)' }}>QR…</span>}</div>
+            {!inAppFirst && (
+              <>
+                <div style={{ marginTop: 14, fontWeight: 800, fontSize: 15 }}>{t('Send exactly {amount}', { amount: order.quote.summaryFrom })}</div>
+                <div style={{ marginTop: 4, fontSize: 12, color: left < 60_000 ? 'var(--err)' : 'var(--mut)' }} role="timer" aria-live="off">
+                  {t('{net} network only · quote locked {time}', { net: order.from.net, time: mmss(left) })}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="field" style={{ marginTop: 8, padding: '12px 16px' }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="field-l">{t('Deposit address')}</div>
+              <div className="field-v" style={{ fontSize: 11.5, wordBreak: 'break-all' }}>{addr}</div>
+            </div>
+            <button className="copy" onClick={copy}>{copied ? t('Copied ✓') : t('Copy')}</button>
+          </div>
+    </>
+  );
 
   return (
     <>
@@ -87,7 +111,7 @@ export default function Deposit() {
       {expired ? (
         <>
           <div className="qrwrap" role="alert">
-            <div className="check bad" style={{ background: '#D14343' }}>!</div>
+            <div className="check bad">!</div>
             <div className="status-t">{t('Quote expired')}</div>
             <div className="status-s" style={{ maxWidth: 280, textAlign: 'center', lineHeight: 1.5 }}>
               {t("The 15-minute window for {amount} at this rate has ended. If you've already sent it, it will be converted at the current rate instead.", { amount: order.quote.summaryFrom })}
@@ -101,20 +125,15 @@ export default function Deposit() {
         </>
       ) : (
         <>
-          <div className="qrwrap">
-            <div className="qr">{qr ? <img src={qr} alt={t('QR code for {addr}', { addr })} /> : <span style={{ font: '600 11px Figtree', color: '#8A8794' }}>QR…</span>}</div>
-            <div style={{ marginTop: 14, fontWeight: 800, fontSize: 15 }}>{t('Send exactly {amount}', { amount: order.quote.summaryFrom })}</div>
-            <div style={{ marginTop: 4, fontSize: 12, color: left < 60_000 ? '#C43232' : 'var(--mut)' }} role="timer" aria-live="off">
-              {t('{net} network only · quote locked {time}', { net: order.from.net, time: mmss(left) })}
+          {inAppFirst && (
+            <div className="dep-head">
+              <div className="dep-amt">{t('Send exactly {amount}', { amount: order.quote.summaryFrom })}</div>
+              <div className={`dep-sub${left < 60_000 ? ' low' : ''}`} role="timer" aria-live="off">
+                {/* two facts, wrapped only between them (never inside a phrase, never with a stray separator) */}
+                {t('{net} network only · quote locked {time}', { net: order.from.net, time: mmss(left) }).split(' · ').map((part) => <span key={part}>{part}</span>)}
+              </div>
             </div>
-          </div>
-          <div className="field" style={{ marginTop: 8, padding: '12px 16px' }}>
-            <div style={{ minWidth: 0 }}>
-              <div className="field-l">{t('Deposit address')}</div>
-              <div className="field-v" style={{ fontSize: 11.5, wordBreak: 'break-all' }}>{addr}</div>
-            </div>
-            <button className="copy" onClick={copy}>{copied ? t('Copied ✓') : t('Copy')}</button>
-          </div>
+          )}
           {unsafe && (
             <div className="notice warn" role="alert" style={{ marginTop: 12 }}>
               <b>{t('Deposit address not configured.')}</b> {t("This is a placeholder, so don't send real funds. Set")} <b>VITE_DEPOSIT_ADDR_{order.from.net === 'Solana' ? 'SOL' : order.from.net === 'Bitcoin' ? 'BTC' : 'ETH'}</b> {t('(or return a per-order address from your API).')}
@@ -125,26 +144,44 @@ export default function Deposit() {
               <b>{t("We received a deposit, but it doesn't match.")}</b> {serverNote} {t('Contact support with order {id}.', { id: order.id })}
             </div>
           )}
-          {synced && order.depositTx ? (
-            // sent from the Relay wallet: nothing left to click, the server confirms it from the chain
-            <div className="wait" style={{ marginTop: 14 }} role="status"><Spinner /><span>{t('Sent. Waiting for the network to confirm your deposit…')}</span></div>
-          ) : canSendInApp ? (
+          {inAppFirst ? (
             <>
-              <ActionButton style={{ marginTop: 12 }} busy={busy} busyLabel={t('Waiting for confirmation…')} disabled={short} onClick={sendFromWallet}>
-                {t('Send {amount} from your Relay wallet', { amount: order.quote.summaryFrom })}
-              </ActionButton>
-              {short && <div className="note" style={{ color: '#C43232' }}>{t('Your Relay wallet has {balance} {sym}. Add funds or send from another wallet.', { balance: balance === null ? '—' : fmtCrypto(balance, 2, order.from.dec), sym: order.from.sym })}</div>}
-              <div className="wait" style={{ marginBottom: 6 }}><Spinner /><span>{t("Or send it yourself · we'll detect your deposit")}</span></div>
-              {synced
-                ? <ActionButton className="btn sec" busy={checking} busyLabel={t('Checking…')} onClick={() => void poll()} disabled={busy}>{t('Check for my deposit')}</ActionButton>
-                : <ActionButton className="btn sec" busy={false} onClick={sent} disabled={busy}>{t("I've sent it from another wallet")}</ActionButton>}
+              {synced && order.depositTx ? (
+                // sent from the Relay wallet: nothing left to click, the server confirms it from the chain
+                <div className="wait" style={{ marginTop: 4 }} role="status"><Spinner /><span>{t('Sent. Waiting for the network to confirm your deposit…')}</span></div>
+              ) : (
+                <>
+                  <ActionButton busy={busy} busyLabel={t('Waiting for confirmation…')} disabled={short} onClick={sendFromWallet}>
+                    {t('Send {amount} from Relay', { amount: order.quote.summaryFrom })}
+                  </ActionButton>
+                  {short && <div className="note" style={{ color: 'var(--err)' }}>{t('Your Relay wallet has {balance} {sym}. Add funds or send from another wallet.', { balance: balance === null ? '—' : fmtCrypto(balance, 2, order.from.dec), sym: order.from.sym })}</div>}
+                </>
+              )}
+              {/* the other way to pay: from another wallet or exchange, to the address */}
+              <details className="dep-more" open={short || undefined}>
+                <summary>{t('Send from another wallet')}</summary>
+                <div className="dep-more-body">
+                  {qrBlock}
+                  <div className="wait" style={{ marginBottom: 6 }}><Spinner /><span>{t("We'll detect your deposit automatically")}</span></div>
+                  {synced
+                    ? <ActionButton className="btn sec" busy={checking} busyLabel={t('Checking…')} onClick={() => void poll()} disabled={busy}>{t('Check for my deposit')}</ActionButton>
+                    : <ActionButton className="btn sec" busy={false} onClick={sent} disabled={busy}>{t("I've sent it from another wallet")}</ActionButton>}
+                </div>
+              </details>
             </>
           ) : (
             <>
-              <div className="wait"><Spinner /><span>{t('Waiting for your deposit…')}</span></div>
-              {synced
-                ? <ActionButton className="btn sec" busy={checking} busyLabel={t('Checking…')} onClick={() => void poll()}>{t('Check for my deposit')}</ActionButton>
-                : <ActionButton busy={busy} busyLabel={t('Checking…')} onClick={sent}>{t("I've sent it")}</ActionButton>}
+              {qrBlock}
+              {synced && order.depositTx ? (
+                <div className="wait" style={{ marginTop: 14 }} role="status"><Spinner /><span>{t('Sent. Waiting for the network to confirm your deposit…')}</span></div>
+              ) : (
+                <>
+                  <div className="wait"><Spinner /><span>{t('Waiting for your deposit…')}</span></div>
+                  {synced
+                    ? <ActionButton className="btn sec" busy={checking} busyLabel={t('Checking…')} onClick={() => void poll()}>{t('Check for my deposit')}</ActionButton>
+                    : <ActionButton busy={busy} busyLabel={t('Checking…')} onClick={sent}>{t("I've sent it")}</ActionButton>}
+                </>
+              )}
             </>
           )}
           <ErrorNote>{error}</ErrorNote>

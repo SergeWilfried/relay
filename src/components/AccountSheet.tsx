@@ -22,7 +22,7 @@ export function AccountSheet({ operator, alias, current, onSave, onClose }: { op
             : { type: 'tel', inputMode: 'tel' as const, autoComplete: 'tel', placeholder: '+225 07 89 45 89', 'aria-label': t('Mobile money number') })}
           aria-invalid={showErr} value={v} onChange={(e) => setV(e.target.value)} autoFocus />
       </div>
-      {showErr && <div className="note" style={{ color: '#C43232', margin: '6px 0 0', textAlign: 'left' }}>{alias ? t('Use 3 to 64 letters, digits or . _ @ + - with no spaces.') : t('Include the country code, for example +225 07 89 45 89.')}</div>}
+      {showErr && <div className="note" style={{ color: 'var(--err)', margin: '6px 0 0', textAlign: 'left' }}>{alias ? t('Use 3 to 64 letters, digits or . _ @ + - with no spaces.') : t('Include the country code, for example +225 07 89 45 89.')}</div>}
       <div className="note" style={{ textAlign: 'left' }}>{alias ? t("We'll use this alias for your payment. Double-check it: payouts can't be reversed.") : t("We'll send your FCFA to this number. Double-check it: payouts can't be reversed.")}</div>
       <ActionButton style={{ marginTop: 14 }} disabled={!ok} onClick={() => { onSave(alias ? normalizeAlias(v) : normalizePhone(v)); onClose(); }}>{alias ? t('Save alias') : t('Save number')}</ActionButton>
     </Sheet>

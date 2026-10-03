@@ -105,7 +105,7 @@ export default function Review() {
     if (state?.confirm && !autoDone.current && draft && canConfirm && !moved && !kycNeeded) { autoDone.current = true; confirm(); }
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!draft) return leaving.current ? null : <Navigate to="/trade/swap" replace />;
+  if (!draft) return leaving.current ? null : <Navigate to="/trade/sell" replace />;
   const q = draft.quote;
   const sum = `${q.summaryFrom} → ${q.summaryTo}`;
   const low = remaining > 0 && remaining <= 8000;
@@ -149,7 +149,7 @@ export default function Review() {
       ) : phase === 'live' && online && (
         <div className={`timer${low ? ' low' : ''}`} role="timer" aria-live="off">
           {t('Quote locked · {time} · refreshes automatically', { time: mmss(remaining) })}
-          <div className="bar"><i style={{ width: `${Math.min(100, (remaining / QUOTE_TTL_MS) * 100)}%` }} /></div>
+          <div className="bar"><i style={{ transform: `scaleX(${Math.min(1, remaining / QUOTE_TTL_MS)})` }} /></div>
         </div>
       )}
     </>

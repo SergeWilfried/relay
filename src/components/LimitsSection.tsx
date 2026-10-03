@@ -13,7 +13,7 @@ function Meter({ label, u, resets }: { label: string; u: Usage; resets: string }
         <div className="limit-v num">{t('{used} / {limit} FCFA', { used: fmtInt(u.used), limit: fmtInt(u.limit) })}</div>
       </div>
       <div className={`limit-bar ${level}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={u.limit} aria-valuenow={Math.min(u.used, u.limit)}>
-        <i style={{ width: `${u.pct}%` }} />
+        <i style={{ transform: `scaleX(${u.pct / 100})` }} />
       </div>
       <div className="limit-s">{t('{amount} FCFA left · {resets}', { amount: fmtInt(u.remaining), resets })}</div>
     </div>

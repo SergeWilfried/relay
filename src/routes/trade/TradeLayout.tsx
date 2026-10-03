@@ -3,7 +3,7 @@ import { TradeProvider, useTrade } from '../../state/trade';
 import type { Tab } from '../../lib/data';
 import { useT } from '../../i18n';
 
-const TABS: [Tab, string][] = [['swap', 'Swap'], ['buy', 'Buy'], ['sell', 'Sell']];
+const TABS: [Tab, string][] = [['sell', 'Sell'], ['buy', 'Buy'], ['swap', 'Swap']];
 
 function Card() {
   const { pathname } = useLocation();

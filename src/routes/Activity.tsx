@@ -26,7 +26,7 @@ export default function Activity() {
         <div className="card-t" style={{ marginBottom: 6 }}>{t('Activity')}</div>
         {list.length === 0 && (
           <EmptyState icon="⇄" title={t('No transactions yet')} body={t('Your swaps, purchases and cash-outs will appear here.')}
-            action={<Link to="/trade/swap" className="btn sec fit" style={{ textDecoration: 'none', marginTop: 14 }}>{t('Make your first trade')}</Link>} />
+            action={<Link to="/trade/sell" className="btn sec fit" style={{ textDecoration: 'none', marginTop: 14 }}>{t('Make your first trade')}</Link>} />
         )}
         {list.map((o) => (
           <Link key={o.id} to={deriveProgress(o, now).phase === 'awaiting_deposit' ? `/trade/deposit/${o.id}` : `/trade/status/${o.id}`} className="hist-r row-link" style={{ gap: 12 }}>

@@ -1,5 +1,5 @@
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
-import { AccountIcon, ActivityIcon, MenuGrid, PoolIcon, TradeIcon } from '../components/Icons';
+import { AccountIcon, ActivityIcon, PoolIcon, TradeIcon } from '../components/Icons';
 import { useApp } from '../state/app';
 import { useTheme } from '../state/theme';
 import { initials, useAuth } from '../auth/AuthContext';
@@ -11,7 +11,7 @@ import { useT } from '../i18n';
 import { deriveProgress, inFlight } from '../lib/orders';
 
 const Logo = () => (
-  <Link to="/trade/swap" className="logo" aria-label="Relay">
+  <Link to="/trade/sell" className="logo" aria-label="Relay">
     <div className="logo-mark">R</div><div className="logo-text">Relay</div>
   </Link>
 );
@@ -36,7 +36,7 @@ export function AppShell() {
     <div className="app">
       {/* mobile header */}
       <header className="hd">
-        <Link to="/account" className="hd-btn" aria-label={t('Menu')}><MenuGrid /></Link>
+        <span className="hd-btn" aria-hidden />{/* keeps the logo centered */}
         <Logo />
         <Link to="/account" className="avatar" aria-label={t('Account')}>{initials(auth.email)}{verified && <span className="avatar-badge">✓</span>}</Link>
       </header>
@@ -46,7 +46,7 @@ export function AppShell() {
         <div className="topbar-l">
           <Logo />
           <nav className="nav" aria-label={t('Main navigation')}>
-            <NavLink to="/trade/swap" className={() => (pathname.startsWith('/trade') ? 'active' : '')}>{t('Trade')}</NavLink>
+            <NavLink to="/trade/sell" className={() => (pathname.startsWith('/trade') ? 'active' : '')}>{t('Trade')}</NavLink>
             <NavLink to="/pool" className={cls}>{t('Pool')}</NavLink>
             <NavLink to="/activity" className={cls}>{t('Activity')}</NavLink>
           </nav>
@@ -80,7 +80,7 @@ export function AppShell() {
       </main>
 
       <nav className="tabbar" aria-label={t('Main navigation')}>
-        <NavLink to="/trade/swap" className={() => (pathname.startsWith('/trade') ? 'active' : '')}><span className="bar" /><TradeIcon />{t('Trade')}</NavLink>
+        <NavLink to="/trade/sell" className={() => (pathname.startsWith('/trade') ? 'active' : '')}><span className="bar" /><TradeIcon />{t('Trade')}</NavLink>
         <NavLink to="/pool" className={cls}><span className="bar" /><PoolIcon />{t('Pool')}</NavLink>
         <NavLink to="/activity" className={cls}><span className="bar" /><ActivityIcon />{t('Activity')}</NavLink>
         <NavLink to="/account" className={cls}><span className="bar" /><AccountIcon />{t('Account')}</NavLink>

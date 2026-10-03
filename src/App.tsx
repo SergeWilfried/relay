@@ -43,9 +43,9 @@ export default function App() {
             {/* the identity check opens here in its own tab, outside the app shell */}
             <Route path="kyc/verify" element={<KycTab />} />
             <Route element={<AppShell />}>
-              <Route index element={<Navigate to="/trade/swap" replace />} />
+              <Route index element={<Navigate to="/trade/sell" replace />} />
               <Route path="trade" element={<TradeLayout />}>
-                <Route index element={<Navigate to="swap" replace />} />
+                <Route index element={<Navigate to="sell" replace />} />
                 <Route path="review" element={<Review />} />
                 <Route path="verify" element={<Verify />} />
                 <Route path="verify/sdk" element={<VerifySdk />} />
@@ -69,7 +69,7 @@ export default function App() {
               </Route>
               <Route path="activity" element={<Activity />} />
               <Route path="account" element={<Account />} />
-              <Route path="*" element={<Navigate to="/trade/swap" replace />} />
+              <Route path="*" element={<Navigate to="/trade/sell" replace />} />
             </Route>
             </Route>
           </Routes>
