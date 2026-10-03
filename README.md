@@ -288,6 +288,20 @@ Live (Privy sign-in) swaps use Privy's swap wallet action: the Worker asks Privy
 - **Verified:** against real Privy for quotes, signed execute acceptance and the signature algorithm; the full flow (readiness, idempotency, polling, webhook settlement, failures, rules) against a signature-verifying mock; the UI in the browser.
 - **Not verified:** the signer policies that deny `transfer` and ERC-20 transfers on a funded wallet, the real `addSigners` consent flow, and a real funded swap. Test one swap and one denied transfer on a funded wallet before launch. A leaked signer key is only as limited as those policies.
 
+### Security headers and rate limits
+- **Headers (`public/_headers`)** are served by Cloudflare with the static app: a strict **Content-Security-Policy** (Privy's documented directives plus Sumsub, and the two public RPC hosts; no inline or eval scripts), HSTS, `X-Frame-Options: DENY` / `frame-ancestors 'none'`, `nosniff`, a referrer policy, a Permissions-Policy and `Cross-Origin-Opener-Policy: same-origin-allow-popups` (Privy's sign-in popups). Camera and microphone are deliberately not restricted: the Sumsub check needs them. The theme script moved to `public/theme-init.js` so no inline script is needed. **If you set `VITE_ETH_RPC_URL` / `VITE_SOL_RPC_URL`, add those origins to `connect-src`**, or balance reads will be blocked. API responses get `no-store`, `nosniff`, `no-referrer` and a locked-down CSP from `secureApi()` in `worker/ratelimit.ts`.
+- **Rate limits** use Cloudflare's Rate Limiting bindings (`ratelimits` in `wrangler.jsonc`; `worker/ratelimit.ts`). They are per Cloudflare location and eventually consistent, so they are abuse guards, not exact quotas. Over the limit the API answers 429 with `Retry-After: 60`.
+
+| Binding | Applies to | Key | Limit |
+|---|---|---|---|
+| `RL_IP` | every `/api/*` request except webhooks | client IP | 600 / min |
+| `RL_ADMIN` | `/api/admin/*`, before the key is compared | client IP | 60 / min |
+| `RL_USER` | every authenticated request | user id (after the token is verified) | 120 / min |
+| `RL_QUOTE` | swap quotes, KYC sync (paid third-party calls) | user id | 30 / min |
+| `RL_WRITE` | order, swap and KYC-token creation, payments | user id | 10 / min |
+
+Webhooks are exempt (signature-verified). The IP limit is generous because mobile carriers put many customers behind one address; the per-user limits are the real control. A limiter that errors lets the request through. The numbers are in `wrangler.jsonc`: tune them there. **Verified:** headers on the production build, the 429 behaviour of the admin and write limits, and Privy sign-in and the Sumsub check loading under the enforced CSP. **Not verified:** the camera step of the Sumsub check and Privy's social-login popups on a real domain (Turnstile also rejects `localhost`).
+
 ### Pools (crypto only)
 
 Pools are crypto-only (ETH, SOL, USDT, USDC); there is no fiat / FCFA pool. A position is an amount of the pool's own coin (stored per pool id), deposits are checked against the user's Relay wallet balance, and values in FCFA are shown as approximations.

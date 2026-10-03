@@ -49,6 +49,14 @@
         // Workers AI, for Clef (@cf/cloudflare/clef). Calls are billed per token; they only happen when CLEF_ENABLED is "true".
         "ai": { "binding": "AI" },
         "kv_namespaces": [{ "binding": "EVENTS" }],
+        // Rate limits (worker/ratelimit.ts). period is 10 or 60 seconds; namespace_id is any unique number string in your account.
+        "ratelimits": [
+            { "name": "RL_IP", "namespace_id": "7001", "simple": { "limit": 600, "period": 60 } },
+            { "name": "RL_ADMIN", "namespace_id": "7002", "simple": { "limit": 60, "period": 60 } },
+            { "name": "RL_USER", "namespace_id": "7003", "simple": { "limit": 120, "period": 60 } },
+            { "name": "RL_QUOTE", "namespace_id": "7004", "simple": { "limit": 30, "period": 60 } },
+            { "name": "RL_WRITE", "namespace_id": "7005", "simple": { "limit": 10, "period": 60 } }
+        ],
         // D1: server-side sell orders (see migrations/). Local: `pnpm db:migrate:local`. Production: `pnpm db:migrate`.
         "d1_databases": [{ "binding": "DB", "database_name": "relay", "migrations_dir": "migrations" }]
         // Secrets (never put these in this file): wrangler secret put PRIVY_WEBHOOK_SIGNING_SECRET | PRIVY_VERIFICATION_KEY | PRIVY_APP_ID | PRIVY_APP_SECRET

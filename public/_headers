@@ -1,0 +1,18 @@
+# Security headers for the static app (Cloudflare Workers static assets: https://developers.cloudflare.com/workers/static-assets/headers/).
+# API responses get theirs from worker/ratelimit.ts (secureApi).
+#
+# Content-Security-Policy: what the app loads, and nothing else.
+#  - Privy (login, embedded wallets): the directives from https://docs.privy.io/security/implementation-guide/content-security-policy
+#  - Sumsub (identity check, /kyc/verify): its SDK script, its iframe at api.sumsub.com, camera preview (blob:) and its API
+#  - ethereum-rpc.publicnode.com / solana-rpc.publicnode.com: balance reads and Solana transfers (the defaults in src/lib/balances.ts).
+#    If you set VITE_ETH_RPC_URL / VITE_SOL_RPC_URL, add those origins to connect-src.
+#  - 'unsafe-inline' for styles only: React sets inline style attributes and the SDKs inject <style>. Scripts have no inline allowance.
+# Camera and microphone are deliberately NOT restricted in Permissions-Policy: Sumsub's iframe needs them.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://static.sumsub.com; style-src 'self' 'unsafe-inline' https://static.sumsub.com; img-src 'self' data: blob: https://*.sumsub.com; font-src 'self' data: https://static.sumsub.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; child-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://*.sumsub.com blob:; frame-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://*.sumsub.com; connect-src 'self' https://auth.privy.io wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://*.rpc.privy.systems https://explorer-api.walletconnect.com https://*.sumsub.com wss://*.sumsub.com https://ethereum-rpc.publicnode.com https://solana-rpc.publicnode.com; worker-src 'self' blob:; manifest-src 'self'
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), payment=(), usb=(), bluetooth=(), serial=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin-allow-popups

@@ -13,6 +13,7 @@ import { clearClefFlag, runPatternReview } from './clefBatch';
 import { POINTS } from './clef';
 import { listSweeps, resolveSweep, retrySweep, runSweeps, SweepConflict } from './sweep';
 import { handleEvent, parseEvent } from './privy';
+import { allow, allowUser, clientIp, secureApi, tooMany } from './ratelimit';
 import { handleSumsubEvent, kycStatus, listKyc, startKyc, SumsubError, syncKyc, verifySumsubWebhook } from './kyc';
 import type { SumsubEvent } from './kyc/sumsubSign';
 import { safeEqual, verifySvix, WebhookVerificationError } from './svix';
@@ -210,7 +211,6 @@ async function payoutWebhook(request: Request, env: Env): Promise<Response> {
 	return json({ ok: true });
 }
 
-/** Swap API (Privy's swap wallet action). Authenticated: a user only ever sees and swaps from their own wallets. */
 /** The user's effective limits and usage (server records: sells, buys and swaps, on every device). */
 async function limitsApi(request: Request, env: Env): Promise<Response> {
 	if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
@@ -221,6 +221,7 @@ async function limitsApi(request: Request, env: Env): Promise<Response> {
 		console.error(JSON.stringify({ msg: 'auth.misconfigured', error: e instanceof Error ? e.message : String(e) }));
 		return json({ error: 'Authentication is not configured' }, 500);
 	}
+	if (!(await allowUser(env, userId, request.method, new URL(request.url).pathname))) return tooMany();
 	return json(await loadLimitsView(env, userId, Date.now()));
 }
 
@@ -233,6 +234,7 @@ async function kycApi(request: Request, env: Env, pathname: string): Promise<Res
 		console.error(JSON.stringify({ msg: 'auth.misconfigured', error: e instanceof Error ? e.message : String(e) }));
 		return json({ error: 'Authentication is not configured' }, 500);
 	}
+	if (!(await allowUser(env, userId, request.method, new URL(request.url).pathname))) return tooMany();
 	try {
 		if (pathname === '/api/kyc/status' && request.method === 'GET') return json(await kycStatus(env, userId));
 		if (pathname === '/api/kyc/token' && request.method === 'POST') return json(await startKyc(env, userId));
@@ -258,6 +260,7 @@ async function sumsubWebhook(request: Request, env: Env): Promise<Response> {
 	}
 }
 
+/** Swap API (Privy's swap wallet action). Authenticated: a user only ever sees and swaps from their own wallets. */
 async function swapApi(request: Request, env: Env, pathname: string): Promise<Response> {
 	let userId: string;
 	try { userId = await authenticate(request, env); }
@@ -266,6 +269,7 @@ async function swapApi(request: Request, env: Env, pathname: string): Promise<Re
 		console.error(JSON.stringify({ msg: 'auth.misconfigured', error: e instanceof Error ? e.message : String(e) }));
 		return json({ error: 'Authentication is not configured' }, 500);
 	}
+	if (!(await allowUser(env, userId, request.method, new URL(request.url).pathname))) return tooMany();
 	const fail = (e: unknown) => {
 		if (e instanceof SwapError) return json({ error: e.message, ...(e.code ? { code: e.code } : {}) }, e.status as 400 | 409 | 429 | 502 | 503);
 		if (e instanceof RuleDenied) return json({ error: e.message, rules: e.ruleIds }, e.status as 403 | 422 | 429);
@@ -307,6 +311,7 @@ async function ordersApi(request: Request, env: Env, ctx: ExecutionContext, path
 		console.error(JSON.stringify({ msg: 'auth.misconfigured', error: e instanceof Error ? e.message : String(e) }));
 		return json({ error: 'Authentication is not configured' }, 500);
 	}
+	if (!(await allowUser(env, userId, request.method, new URL(request.url).pathname))) return tooMany();
 
 	await ensureProfile(env, userId, null, Date.now()); // account age starts at the first authenticated call
 
@@ -355,7 +360,24 @@ async function ordersApi(request: Request, env: Env, ctx: ExecutionContext, path
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const { pathname } = new URL(request.url);
+		const res = await handle(request, env, ctx, pathname);
+		return pathname.startsWith('/api/') ? secureApi(res) : res;
+	},
+	/** Cron trigger (wrangler.jsonc "triggers"): forwards confirmed deposits to the treasury. */
+	async scheduled(event, env, ctx): Promise<void> {
+		await cron(event, env, ctx);
+	},
+} satisfies ExportedHandler<Env>;
+
+async function handle(request: Request, env: Env, ctx: ExecutionContext, pathname: string): Promise<Response> {
+	{
 		try {
+			// abuse guards before any work (webhooks are exempt: they are signature-verified, see worker/ratelimit.ts)
+			if (!pathname.startsWith('/api/webhooks/')) {
+				const ip = clientIp(request);
+				if (!(await allow(env.RL_IP, ip))) return tooMany();
+				if (pathname.startsWith('/api/admin/') && !(await allow(env.RL_ADMIN, ip))) return tooMany();
+			}
 			if (pathname === '/api/health') return json({ ok: true });
 			if (pathname === '/api/geo') return Response.json({ country: countryOf(request) }, { headers: { 'cache-control': 'private, max-age=3600' } });
 			if (pathname === '/api/webhooks/privy') {
@@ -376,9 +398,11 @@ export default {
 			console.error(JSON.stringify({ msg: 'unhandled', path: pathname, error: e instanceof Error ? e.message : String(e) }));
 			return json({ error: 'Internal error' }, 500);
 		}
-	},
-	/** Cron trigger (wrangler.jsonc "triggers"): forwards confirmed deposits to the treasury. */
-	async scheduled(event, env, ctx): Promise<void> {
+	}
+}
+
+async function cron(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+	{
 		// the daily cron is Clef's activity review (C-04); the 5-minute cron is sweeps
 		if (event.cron === DAILY_CRON) { ctx.waitUntil(runPatternReview(env).then((r) => console.log(JSON.stringify({ msg: 'clef.review', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'clef.review_failed', error: e instanceof Error ? e.message : String(e) })))); return; }
 		ctx.waitUntil(reconcilePayouts(env).then((r) => console.log(JSON.stringify({ msg: 'payout.reconcile', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'payout.reconcile_failed', error: e instanceof Error ? e.message : String(e) }))));
@@ -387,5 +411,5 @@ export default {
 		ctx.waitUntil(checkStaleRefunds(env).catch((e) => console.error(JSON.stringify({ msg: 'refund.stale_check_failed', error: e instanceof Error ? e.message : String(e) }))));
 		ctx.waitUntil(checkFloat(env).catch((e) => console.error(JSON.stringify({ msg: 'payout.float_check_failed', error: e instanceof Error ? e.message : String(e) }))));
 		ctx.waitUntil(runSweeps(env).then((r) => console.log(JSON.stringify({ msg: 'sweep.run', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'sweep.run_failed', error: e instanceof Error ? e.message : String(e) }))));
-	},
-} satisfies ExportedHandler<Env>;
+	}
+}

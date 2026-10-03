@@ -479,4 +479,5 @@ export const app: Record<string, string> = {
   "You can close this tab and go back to Relay: it continues by itself when you are verified.": "Vous pouvez fermer cet onglet et revenir sur Relay : cela continue tout seul dès que vous êtes vérifié.",
   "Close this tab": "Fermer cet onglet",
   "Without identity verification you can move up to {amount} FCFA per day. Verify your identity to raise your limits to {max} FCFA per day.": "Sans vérification d’identité, vous pouvez échanger jusqu’à {amount} FCFA par jour. Vérifiez votre identité pour porter vos plafonds à {max} FCFA par jour.",
+  "Too many requests. Please slow down and try again shortly.": "Trop de requêtes. Ralentissez et réessayez dans un instant.",
 };
