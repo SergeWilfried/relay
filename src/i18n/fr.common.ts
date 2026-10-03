@@ -14,7 +14,7 @@ export const common: Record<string, string> = {
   'Government ID': 'Pièce d’identité',
   "National ID, passport or driver's licence": 'Carte d’identité, passeport ou permis de conduire',
   'Selfie': 'Selfie',
-  'Quick face match — no video call': 'Comparaison rapide du visage — sans appel vidéo',
+  'Quick face match — no video call': 'Comparaison rapide du visage',
   'Verify my identity': 'Vérifier mon identité',
   'Identity check': 'Vérification d’identité',
   'Verification partner': 'Partenaire de vérification',
