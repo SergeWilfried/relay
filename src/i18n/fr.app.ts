@@ -439,7 +439,7 @@ export const app: Record<string, string> = {
   'Deposit arrived after the quote expired; converted at the current rate': 'Le dépôt est arrivé après l’expiration de la cotation ; converti au taux actuel',
   'Number is not registered for mobile money (sandbox)': 'Ce numéro n’est pas enregistré pour Mobile Money (sandbox)',
   'Missing phone number or operator': 'Numéro de téléphone ou opérateur manquant',
-  "A one-time identity check is required to move more than {amount} FCFA per day. It is handled by our verification partner — Relay never sees or stores your documents.": "Une vérification d’identité unique est requise pour dépasser {amount} FCFA par jour. Elle est réalisée par notre partenaire de vérification : Relay ne voit ni ne conserve vos documents.",
+  "A one-time identity check is required to move more than {amount} FCFA per day. It is handled by our verification partner — Relay never sees or stores your documents.": "Une vérification d’identité unique est requise pour dépasser {amount} FCFA par jour.",
   "Verify your identity to continue.": "Vérifiez votre identité pour continuer.",
   "Please try again.": "Veuillez réessayer.",
   "Identity verification is unavailable right now. Please try again later.": "La vérification d’identité est indisponible pour le moment. Réessayez plus tard.",
