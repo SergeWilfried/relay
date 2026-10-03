@@ -12,3 +12,6 @@ export const feesOn = (gross: number) => ({ platform: gross * PLATFORM_FEE, psp:
 
 /** The customer's payout is rounded DOWN to whole 100 FCFA (the server does the same), so rounding never costs Relay money. */
 export const floor100 = (n: number) => Math.floor(n / 100) * 100;
+
+/** Flat network fee on a purchase, in FCFA (worker/pricing.ts holds the same number; a test keeps them equal). */
+export const NETWORK_FEE_FCFA = 710;

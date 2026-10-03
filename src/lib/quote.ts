@@ -1,7 +1,7 @@
 import { ASSETS, ETH, type Asset, type Provider, type Tab } from './data';
 import { fmtCrypto, fmtInt, fmtRate, localizePct } from './format';
 import { tr } from '../i18n';
-import { feesOn, floor100, TOTAL_FEE } from './fees';
+import { feesOn, floor100, NETWORK_FEE_FCFA, TOTAL_FEE } from './fees';
 
 export const shortAddr = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 const pct = (r: number) => localizePct(`${r * 100}%`);
@@ -69,7 +69,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
   }
   if (tab === 'buy') {
     const fee = feesOn(amount).total;
-    const netFee = 710;
+    const netFee = NETWORK_FEE_FCFA;
     const net = Math.max(0, amount - fee - netFee);
     const k = 10 ** crypto.dec;
     const recv = Math.floor((net / crypto.fcfa) * k) / k;
@@ -85,7 +85,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
         feeRow(amount),
         [tr('Network fee'), `${fmtInt(netFee)} FCFA`],
         [tr('Receiving wallet'), shortAddr(wallet)],
-        [tr('Est. arrival'), tr('Instant')],
+        [tr('Est. arrival'), tr('Usually within 30 minutes')],
         [tr('You receive'), `${fmtCrypto(recv, crypto.dec, crypto.dec)} ${crypto.sym}`],
       ],
       summaryFrom: `${fmtInt(amount)} FCFA`, summaryTo: `${fmtCrypto(recv, crypto.dec, crypto.dec)} ${crypto.sym}`,

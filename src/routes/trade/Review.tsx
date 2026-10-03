@@ -7,7 +7,7 @@ import { lenStep } from '../../lib/format';
 import { mmss, useNow, useOnline } from '../../lib/net';
 import { QUOTE_TTL_MS, submitDraft } from '../../lib/orders';
 import { useAuth } from '../../auth/AuthContext';
-import { createServerOrder } from '../../lib/serverOrders';
+import { createServerBuy, createServerOrder } from '../../lib/serverOrders';
 import { useT } from '../../i18n';
 import { useApp } from '../../state/app';
 import { useTrade } from '../../state/trade';
@@ -61,9 +61,14 @@ export default function Review() {
         const s = await createServerOrder(order);
         order = { ...order, synced: true, depositAddress: s.depositAddress, depositLive: s.depositLive, depositExpiresAt: s.expiresAt };
       }
+      // purchases: the server fixes the quote and the payment method; the customer then pays from the Pay screen
+      if (auth.mode === 'privy' && order.tab === 'buy') {
+        const b = await createServerBuy(order);
+        order = { ...order, synced: true, buy: b, startedAt: null };
+      }
       leaving.current = true;
       addOrder(order);
-      nav(order.tab === 'sell' ? `/trade/deposit/${order.id}` : `/trade/status/${order.id}`, { replace: true });
+      nav(order.tab === 'sell' ? `/trade/deposit/${order.id}` : order.tab === 'buy' && order.synced ? `/trade/pay/${order.id}` : `/trade/status/${order.id}`, { replace: true });
       clearDraft();
     });
   };

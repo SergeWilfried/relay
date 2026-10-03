@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Spinner } from '../../components/Spinner';
 import { StepList } from '../../components/StepList';
 import { SUPPORT_EMAIL } from '../../lib/data';
+import { fmtInt } from '../../lib/format';
 import { useNow, useOnline } from '../../lib/net';
 import { deriveProgress, inFlight } from '../../lib/orders';
 import { tr, useT } from '../../i18n';
@@ -25,14 +26,21 @@ export default function Status() {
 
   if (!order || !order.submitted) return <Navigate to="/activity" replace />;
   const { phase, step } = deriveProgress(order, now);
-  if (phase === 'awaiting_deposit') return <Navigate to={`/trade/deposit/${order.id}`} replace />;
+  if (phase === 'awaiting_deposit') return <Navigate to={order.tab === 'buy' ? `/trade/pay/${order.id}` : `/trade/deposit/${order.id}`} replace />;
 
   // Server-backed sells: show the real payout stages instead of the demo timeline
   const live = order.synced && order.tab === 'sell';
-  const steps: [string, string][] = live
+  // purchases registered with the server: the customer has paid; a person sends the crypto from the treasury
+  const liveBuy = order.synced && order.tab === 'buy' && !!order.buy;
+  const buy = order.buy;
+  const shortWallet = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+  const steps: [string, string][] = liveBuy
+    ? [[t('Payment received'), `${fmtInt(order.amount)} FCFA · ${order.provider?.name ?? ''}`], [t('Preparing your {sym}', { sym: order.from.sym }), t('Our team sends it from the treasury')], [t('{sym} sent', { sym: order.from.sym }), shortWallet(order.wallet)]]
+    : live
     ? [[t('Deposit received'), t('{amount} confirmed on-chain', { amount: order.quote.summaryFrom })], [t('Payout review'), t('Our team checks and approves the payout')], [t('Sent to {provider}', { provider: order.provider?.name ?? t('mobile money') }), order.phone ?? '']]
     : order.steps;
   const reviewing = live && phase === 'processing' && step === 1;
+  const sendingBuy = liveBuy && phase === 'processing';
   const underpaid = live && order.server?.status === 'underpaid';
   const done = phase === 'done';
   const failed = phase === 'failed';
@@ -54,9 +62,9 @@ export default function Status() {
       )}
       <div className="status-top" aria-live="polite">
         {done ? <div className="check">✓</div> : failed ? <div className="check bad">✕</div> : <Spinner large />}
-        <div className="status-t">{done ? order.doneTitle : failed ? (live ? t('Payout needs attention') : t("This didn't go through")) : reviewing ? t('Payout under review') : order.title}</div>
+        <div className="status-t">{done ? order.doneTitle : failed ? (live ? t('Payout needs attention') : t("This didn't go through")) : reviewing ? t('Payout under review') : sendingBuy ? t('Sending your {sym}', { sym: order.from.sym }) : order.title}</div>
         <div className="status-s">
-          {done ? order.doneSub : failed ? t("Step {n} of 3 didn't complete · {amount}", { n: step + 1, amount: order.quote.summaryFrom }) : reviewing ? t('{amount} to {provider}', { amount: order.quote.summaryTo, provider: order.provider?.name ?? '' }) : order.sub}
+          {done ? order.doneSub : failed ? t("Step {n} of 3 didn't complete · {amount}", { n: step + 1, amount: order.quote.summaryFrom }) : reviewing ? t('{amount} to {provider}', { amount: order.quote.summaryTo, provider: order.provider?.name ?? '' }) : sendingBuy ? t('{amount} to your wallet', { amount: order.quote.summaryTo }) : order.sub}
         </div>
       </div>
 
@@ -73,6 +81,13 @@ export default function Status() {
           )}
         </div>
       )}
+      {sendingBuy && (
+        <div className="notice" role="status">
+          <b>{t('We received your payment.')}</b> {t('Your {sym} will be sent to {wallet} shortly. You can leave this page.', { sym: order.from.sym, wallet: shortWallet(order.wallet) })}
+          <div><Link to="/activity" className="notice-act">{t('Go to Activity')}</Link></div>
+        </div>
+      )}
+      {liveBuy && buy?.hold && <div className="notice" role="status"><b>{t('Your purchase is being reviewed.')}</b> {tr(buy.hold.message)}</div>}
       {order.server?.hold && (
         <div className="notice" role="status"><b>{t('Your payout is on hold.')}</b> {tr(order.server.hold)}</div>
       )}
@@ -88,7 +103,12 @@ export default function Status() {
           <div><Link to="/activity" className="notice-act">{t('Go to Activity')}</Link></div>
         </div>
       )}
-      {failed && (
+      {failed && liveBuy && (
+        <div className="notice warn" role="alert">
+          <b>{t("This purchase didn't go through.")}</b> {buy?.failure ? `${tr(buy.failure)}. ` : ''}{t('Nothing was charged.')}
+        </div>
+      )}
+      {failed && !liveBuy && (
         <div className="notice warn" role="alert">
           {live
             ? underpaid
@@ -98,7 +118,9 @@ export default function Status() {
         </div>
       )}
 
-      <div className="hash">{txLabel} · <a href={explorer} target="_blank" rel="noreferrer">{t('view on explorer')}</a></div>
+      {liveBuy
+        ? done && buy?.txHash && <div className="hash">{buy.txHash.slice(0, 8)}…{buy.txHash.slice(-6)} · <a href={order.from.explorer + buy.txHash} target="_blank" rel="noreferrer">{t('view on explorer')}</a></div>
+        : <div className="hash">{txLabel} · <a href={explorer} target="_blank" rel="noreferrer">{t('view on explorer')}</a></div>}
 
       {done && <button className="btn sec" onClick={() => nav(`/trade/${order.tab}`, { replace: true })}>{t('Start another')}</button>}
       {failed && (

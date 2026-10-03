@@ -39,7 +39,7 @@ export default function Deposit() {
     setChecking(true);
     try {
       const s = await fetchServerOrder(order.id);
-      if (!s) return;
+      if (!s || s.tab !== 'sell') return;
       const patch = patchFromServer(order, s);
       if (patch) updateOrder(order.id, patch);
       if (s.status === 'underpaid') setServerNote(s.note ? tr(s.note) : tr("We received a deposit that doesn't match your order."));

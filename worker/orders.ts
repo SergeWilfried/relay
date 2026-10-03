@@ -4,7 +4,7 @@ import { getProvider } from './payout';
 import { createDepositWallet } from './depositWallet';
 import { isDenied, kindOfChain } from './lists';
 import { sellQuote } from './pricing';
-import { COUNTED, ensureProfile, evaluate, loadFacts, loadModes, logDecision, RuleDenied, windowStarts, type Outcome } from './rules';
+import { BUY_COUNTED, COUNTED, ensureProfile, evaluate, loadFacts, loadModes, logDecision, RuleDenied, windowStarts, type Outcome } from './rules';
 
 export type OrderStatus = 'awaiting_deposit' | 'processing' | 'underpaid';
 
@@ -24,6 +24,7 @@ interface OrderRow {
 
 /** What the client sees. */
 export interface OrderView {
+	tab: 'sell';
 	id: string; status: OrderStatus; asset: string; amount: string;
 	depositAddress: string; depositLive: boolean; expiresAt: number;
 	startedAt: number | null; depositTx: string | null; note: string | null; payout: PayoutView | null;
@@ -40,7 +41,7 @@ export const holdActive = (r: { hold_rules: string | null; hold_until: number | 
 	!!r.hold_rules && r.hold_released_at === null && (r.hold_until === null || now < r.hold_until);
 
 const view = (r: OrderRow): OrderView => ({
-	id: r.id, status: r.status, asset: r.asset, amount: r.amount,
+	tab: 'sell', id: r.id, status: r.status, asset: r.asset, amount: r.amount,
 	depositAddress: r.deposit_address, depositLive: r.deposit_live === 1, expiresAt: r.expires_at,
 	startedAt: r.started_at, depositTx: r.deposit_tx, note: r.note,
 	hold: holdActive(r) ? { message: r.hold_message ?? '', until: r.hold_until } : null,
@@ -105,8 +106,10 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 		`INSERT INTO orders (id, user_id, tab, asset, network, amount, amount_units, provider_id, phone, operator, deposit_address,
 		   deposit_wallet_id, deposit_live, status, expires_at, created_at, updated_at, amount_fcfa, hold_rules, hold_message, hold_until)
 		 SELECT ?8, ?1, 'sell', ?9, ?10, ?11, ?12, ?13, ?14, ?13, ?15, ?16, ?17, 'awaiting_deposit', ?18, ?2, ?2, ?5, ?19, ?20, ?21
-		 WHERE (SELECT COALESCE(SUM(o.amount_fcfa), 0) FROM orders o WHERE ${COUNTED} AND o.created_at >= ?3) + ?5 <= ?6
-		   AND (SELECT COALESCE(SUM(o.amount_fcfa), 0) FROM orders o WHERE ${COUNTED} AND o.created_at >= ?4) + ?5 <= ?7`,
+		 WHERE (SELECT COALESCE(SUM(o.amount_fcfa), 0) FROM orders o WHERE ${COUNTED} AND o.created_at >= ?3)
+		     + (SELECT COALESCE(SUM(b.fcfa), 0) FROM buy_orders b WHERE ${BUY_COUNTED} AND b.created_at >= ?3) + ?5 <= ?6
+		   AND (SELECT COALESCE(SUM(o.amount_fcfa), 0) FROM orders o WHERE ${COUNTED} AND o.created_at >= ?4)
+		     + (SELECT COALESCE(SUM(b.fcfa), 0) FROM buy_orders b WHERE ${BUY_COUNTED} AND b.created_at >= ?4) + ?5 <= ?7`,
 	).bind(userId, now, w.day, w.month, amountFcfa, outcome.limits.daily, outcome.limits.monthly,
 		id, asset.sym, asset.network, amount, toUnits(amount, asset.decimals).toString(), operator, phone, address,
 		wallet.walletId, wallet.live ? 1 : 0, now + DEPOSIT_WINDOW_MS,

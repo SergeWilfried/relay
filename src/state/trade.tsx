@@ -98,7 +98,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     amountOk, confirmAmount: () => setAmountOk(true),
     switchTab, params, balance, draft,
     lockDraft: (quote, n) => {
-      const o = buildOrder(tab, from, to, provider, quote, n, wallet.address, undefined, { phone: tab === 'sell' ? phone : null });
+      const o = buildOrder(tab, from, to, provider, quote, n, wallet.address, undefined, { phone: tab === 'swap' ? null : phone });
       setDraft(o);
       return o;
     },

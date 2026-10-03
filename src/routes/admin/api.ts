@@ -82,6 +82,7 @@ export interface Revenue {
   daily: (RevenueTotals & { day: string })[];
   byAsset: (RevenueTotals & { key: string })[];
   byOperator: (RevenueTotals & { key: string })[];
+  byType: (RevenueTotals & { key: string })[];
   uncountedPaid: number;
 }
 export const getRevenue = (days: number) => call<Revenue>(`/revenue?days=${days}`);
@@ -115,3 +116,31 @@ export const createRefund = (b: { orderId: string; destination: string; reason: 
 export const approveRefund = (id: string, by: string) => call<AdminRefund>(`/refunds/${id}/approve`, 'POST', { by });
 export const markRefundSent = (id: string, by: string, txHash: string) => call<AdminRefund>(`/refunds/${id}/sent`, 'POST', { by, txHash });
 export const cancelRefund = (id: string, by: string, reason: string) => call<AdminRefund>(`/refunds/${id}/cancel`, 'POST', { by, reason });
+
+export interface AdminBuy {
+  id: string;
+  user_id: string;
+  asset: string;
+  network: string;
+  fcfa: number;
+  amount_units: string;
+  destination: string;
+  operator: string;
+  provider_code: string;
+  status: 'created' | 'collecting' | 'collected' | 'delivered' | 'failed' | 'expired' | 'cancelled';
+  failure: string | null;
+  failure_detail: string | null;
+  tx_hash: string | null;
+  delivered_by: string | null;
+  hold_rules: string | null;
+  hold_message: string | null;
+  hold_until: number | null;
+  hold_released_at: number | null;
+  collected_at: number | null;
+  delivered_at: number | null;
+  created_at: number;
+  events: { action: string; by_name: string; note: string | null; created_at: number }[];
+}
+export const listBuys = () => call<{ buys: AdminBuy[] }>('/buys').then((r) => r.buys);
+export const markDelivered = (id: string, by: string, txHash: string) => call<AdminBuy>(`/buys/${id}/delivered`, 'POST', { by, txHash });
+export const releaseBuyHold = (id: string, by: string, note: string) => call<AdminBuy>(`/buys/${id}/release-hold`, 'POST', { by, note });

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useApp } from '../state/app';
-import { isSettled, listServerOrders, patchFromServer } from './serverOrders';
+import { isSettled, listServerOrders, patchFromServer, patchFromServerBuy } from './serverOrders';
 
 const POLL_MS = 6000;
 
@@ -23,9 +23,14 @@ export function useOrderSync() {
       try {
         const server = await listServerOrders();
         if (stop) return;
-        for (const s of server) {
+        for (const s of server.orders) {
           const local = ref.current.find((o) => o.id === s.id && o.synced);
           const patch = local && patchFromServer(local, s);
+          if (local && patch) updateOrder(local.id, patch);
+        }
+        for (const b of server.buys) {
+          const local = ref.current.find((o) => o.id === b.id && o.synced && o.tab === 'buy');
+          const patch = local && patchFromServerBuy(local, b);
           if (local && patch) updateOrder(local.id, patch);
         }
       } catch { /* offline or transient: try again next tick */ }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PLATFORM_FEE, PSP_FEE, sellQuote, TOTAL_FEE } from '../worker/pricing.ts';
+import { buyQuote, NETWORK_FEE_FCFA, PLATFORM_FEE, PSP_FEE, sellQuote, TOTAL_FEE } from '../worker/pricing.ts';
 import * as client from '../src/lib/fees.ts';
 
 test('the fee is 2.5% platform + 2.5% PSP = 5%', () => {
@@ -13,6 +13,7 @@ test('the app and the server charge the same fees', () => {
   assert.equal(client.PLATFORM_FEE, PLATFORM_FEE);
   assert.equal(client.PSP_FEE, PSP_FEE);
   assert.equal(client.TOTAL_FEE, TOTAL_FEE);
+  assert.equal(client.NETWORK_FEE_FCFA, NETWORK_FEE_FCFA);
 });
 
 test('payout + platform fee + PSP fee always equals the gross value, to the franc', () => {
@@ -39,3 +40,25 @@ test('the customer gets 95% of the value, rounded down by less than 100 FCFA, ne
 test('the app rounds the payout down like the server', () => assert.equal(client.floor100(569.9), 500));
 
 test('an unknown asset is refused', () => assert.throws(() => sellQuote('DOGE', '1')));
+
+test('buy: 5% fees and the network fee come off, the rest buys crypto at the rate, rounded down', () => {
+  const q = buyQuote('USDT', 600_000, 6); // 600 000 FCFA at 600 FCFA per USDT
+  assert.deepEqual([q.platformFeeFcfa, q.pspFeeFcfa, q.networkFeeFcfa], [15_000, 15_000, 710]);
+  // (600 000 - 15 000 - 15 000 - 710) = 569 290 FCFA / 600 = 948.816666... USDT, rounded down to the base unit
+  assert.equal(q.amountUnits, 948_816_666n);
+});
+
+test('buy: the customer never receives more than they paid for, for any amount (and tiny amounts buy nothing)', () => {
+  for (const [asset, dec, fcfa] of [['ETH', 18, 150_000], ['SOL', 9, 99_900], ['USDC', 6, 1_000], ['ETH', 18, 2_000_000]] as const) {
+    const q = buyQuote(asset, fcfa, dec);
+    assert.ok(q.platformFeeFcfa >= 0 && q.pspFeeFcfa >= 0);
+    assert.ok(q.platformFeeFcfa + q.pspFeeFcfa === Math.round(fcfa * 0.05), `${asset} ${fcfa}`);
+    assert.ok(q.amountUnits > 0n, `${asset} ${fcfa}`);
+  }
+  assert.equal(buyQuote('USDT', 500, 6).amountUnits, 0n);
+});
+
+test('buy: ETH is exact to the base unit, with no floating point error', () => {
+  // 1 740 116 FCFA - 5% (87 006) - 710 network = 1 652 400 FCFA = exactly one ETH at the placeholder rate
+  assert.equal(buyQuote('ETH', 1_740_116, 18).amountUnits, 1_000_000_000_000_000_000n);
+});

@@ -13,6 +13,7 @@ import Review from './routes/trade/Review';
 import Verify from './routes/trade/Verify';
 import VerifySdk from './routes/trade/VerifySdk';
 import Deposit from './routes/trade/Deposit';
+import Pay from './routes/trade/Pay';
 import Status from './routes/trade/Status';
 import PoolList from './routes/pool/PoolList';
 import PoolDetail from './routes/pool/PoolDetail';
@@ -46,6 +47,7 @@ export default function App() {
                 <Route path="verify" element={<Verify />} />
                 <Route path="verify/sdk" element={<VerifySdk />} />
                 <Route path="deposit/:id" element={<Deposit />} />
+                <Route path="pay/:id" element={<Pay />} />
                 <Route path="status/:id" element={<Status />} />
                 <Route path=":tab" element={<TradeForm />} />
               </Route>

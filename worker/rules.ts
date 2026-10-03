@@ -173,6 +173,12 @@ export const COUNTED = `o.user_id = ?1 AND o.amount_fcfa IS NOT NULL AND o.statu
 	AND NOT (o.status = 'awaiting_deposit' AND o.expires_at < ?2)
 	AND COALESCE((SELECT p.status FROM payouts p WHERE p.order_id = o.id), '') NOT IN ('rejected', 'failed')`;
 
+/**
+ * Buy orders that count against a user's limits (together with sells): not failed, expired or cancelled, and not an unpaid one whose
+ * window has closed. Uses ?1 = user and ?2 = now, like COUNTED.
+ */
+export const BUY_COUNTED = `b.user_id = ?1 AND b.status NOT IN ('failed', 'expired', 'cancelled') AND NOT (b.status = 'created' AND b.expires_at < ?2)`;
+
 export interface Profile { firstSeenAt: number; lastCountry: string | null; status: string; clefFlag: boolean }
 
 /** Creates the profile on first sight (account age starts here) and returns it. */
@@ -214,10 +220,16 @@ export async function loadFacts(env: Env, userId: string, input: { amountFcfa: n
 	const phones = await env.DB.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(phone = ?), 0) AS same FROM orders WHERE user_id = ? AND phone IS NOT NULL`).bind(input.phone, userId).first<{ total: number; same: number }>();
 	const near = await env.DB.prepare(`SELECT COUNT(*) AS n FROM decisions WHERE user_id = ? AND created_at >= ? AND amount_fcfa >= ? AND amount_fcfa <= ?`)
 		.bind(userId, now - 7 * DAY_MS, 0.9 * BASE_LIMITS.perTx, BASE_LIMITS.perTx).first<{ n: number }>();
+	// buys count toward the same daily / monthly limits and the open-order cap
+	const buys = await env.DB.prepare(
+		`SELECT COALESCE(SUM(CASE WHEN b.created_at >= ?3 THEN b.fcfa END), 0) AS day, COALESCE(SUM(CASE WHEN b.created_at >= ?4 THEN b.fcfa END), 0) AS month,
+		        COALESCE(SUM(CASE WHEN b.status IN ('created', 'collecting') THEN 1 END), 0) AS open
+		 FROM buy_orders b WHERE ${BUY_COUNTED} AND b.created_at >= ?4`,
+	).bind(userId, now, w.day, w.month).first<{ day: number; month: number; open: number }>();
 	return {
 		amount_fcfa: input.amountFcfa, country: input.country, user_status: profile.status,
 		account_age_days: Math.floor((now - profile.firstSeenAt) / DAY_MS), tier: 0,
-		day_fcfa: usage?.day ?? 0, month_fcfa: usage?.month ?? 0, open_orders: usage?.open ?? 0, orders_last_hour: rate?.n ?? 0,
+		day_fcfa: (usage?.day ?? 0) + (buys?.day ?? 0), month_fcfa: (usage?.month ?? 0) + (buys?.month ?? 0), open_orders: (usage?.open ?? 0) + (buys?.open ?? 0), orders_last_hour: rate?.n ?? 0,
 		country_changed: !!input.country && !!profile.lastCountry && input.country !== profile.lastCountry,
 		// a first-ever number is the baseline, not a change
 		payout_number_changed: (phones?.total ?? 0) > 0 && (phones?.same ?? 0) === 0,

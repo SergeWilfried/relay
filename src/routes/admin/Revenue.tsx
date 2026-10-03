@@ -82,7 +82,7 @@ export default function Revenue({ onAuthError }: { onAuthError: () => void }) {
       {data && (
         <>
           <div className="sub" style={{ margin: '12px 2px 8px' }}>
-            Customers pay {pct(data.feeRates.total)} of each order: {pct(data.feeRates.platform)} platform fee (Relay's revenue) + {pct(data.feeRates.psp)} payment provider fee (passed through). Recognised when the payout is paid.
+            Customers pay {pct(data.feeRates.total)} of each order: {pct(data.feeRates.platform)} platform fee (Relay's revenue) + {pct(data.feeRates.psp)} payment provider fee (passed through). Recognised when the payout is paid (cash-outs) or the crypto is delivered (purchases).
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 10 }}>
             <Kpi big label={`Platform revenue (${pct(data.feeRates.platform)})`} value={fcfa(data.paid.platformFeeFcfa)} sub={data.pending.platformFeeFcfa > 0 ? `+ ${fcfa(data.pending.platformFeeFcfa)} pending` : undefined} />
@@ -103,11 +103,12 @@ export default function Revenue({ onAuthError }: { onAuthError: () => void }) {
             {bars.length > 0 && <div className="sub" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}><span>{bars[0]!.day}</span><span>{bars[bars.length - 1]!.day}</span></div>}
           </div>
 
-          <Breakdown title="By asset sold" rows={data.byAsset} />
-          <Breakdown title="By payout provider" rows={data.byOperator} />
+          <Breakdown title="Sells and purchases" rows={data.byType.map((r) => ({ ...r, key: r.key === 'sell' ? 'Cash-outs (sells)' : 'Purchases (buys)' }))} />
+          <Breakdown title="By asset" rows={data.byAsset} />
+          <Breakdown title="By mobile money provider" rows={data.byOperator} />
 
           <div className="sub" style={{ margin: '12px 2px' }}>
-            Sells only: buys and swaps aren't recorded on the server yet, so their fees aren't included. Failed and rejected payouts earn nothing.
+            Cash-outs earn their fees when the payout is paid, purchases when the crypto is delivered; payments still waiting are shown as pending. Swaps aren't recorded on the server yet. Failed and rejected payouts earn nothing.
             {data.uncountedPaid > 0 && ` ${data.uncountedPaid} older paid payout${data.uncountedPaid === 1 ? ' has' : 's have'} no fee split (made before fees were recorded) and ${data.uncountedPaid === 1 ? 'is' : 'are'} not counted.`}
           </div>
         </>

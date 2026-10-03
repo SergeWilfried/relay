@@ -70,12 +70,12 @@ export function AppShell() {
       <main className="scroll">
         {/* stay out of the way mid-transaction */}
         {!online && <div className="banner offline" role="status">{t("You're offline. Quotes and new orders are paused until you reconnect.")}</div>}
-        {active && !/^\/trade\/(deposit|status)/.test(pathname) && (
-          <Link className="banner live" to={deriveProgress(active, now).phase === 'awaiting_deposit' ? `/trade/deposit/${active.id}` : `/trade/status/${active.id}`}>
-            <span>{deriveProgress(active, now).phase === 'awaiting_deposit' ? t('Waiting for your deposit') : t('Transaction in progress')} · {active.quote.summaryFrom} → {active.quote.summaryTo}</span><span aria-hidden>›</span>
+        {active && !/^\/trade\/(deposit|pay|status)/.test(pathname) && (
+          <Link className="banner live" to={deriveProgress(active, now).phase === 'awaiting_deposit' ? (active.tab === 'buy' ? `/trade/pay/${active.id}` : `/trade/deposit/${active.id}`) : `/trade/status/${active.id}`}>
+            <span>{deriveProgress(active, now).phase === 'awaiting_deposit' ? (active.tab === 'buy' ? t('Waiting for your payment') : t('Waiting for your deposit')) : t('Transaction in progress')} · {active.quote.summaryFrom} → {active.quote.summaryTo}</span><span aria-hidden>›</span>
           </Link>
         )}
-        {!/^\/trade\/(review|verify|deposit|status)/.test(pathname) && <InstallBanner {...install} />}
+        {!/^\/trade\/(review|verify|deposit|pay|status)/.test(pathname) && <InstallBanner {...install} />}
         <Outlet />
       </main>
 

@@ -4,6 +4,7 @@ import { Sheet } from '../../components/Sheet';
 import { fmtInt } from '../../lib/format';
 import { useSubmit } from '../../lib/api';
 import * as api from './api';
+import Deliveries from './Deliveries';
 import Refunds from './Refunds';
 import Revenue from './Revenue';
 import Sweeps from './Sweeps';
@@ -102,7 +103,7 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => !!api.getKey());
   const [rows, setRows] = useState<AdminPayout[] | null>(null);
-  const [view, setView] = useState<'payouts' | 'sweeps' | 'refunds' | 'revenue'>('payouts');
+  const [view, setView] = useState<'payouts' | 'deliveries' | 'sweeps' | 'refunds' | 'revenue'>('payouts');
   const [tab, setTab] = useState<Tab>('pending');
   const [action, setAction] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -145,10 +146,12 @@ export default function Admin() {
 
       <div className="admin-tabs" role="tablist" aria-label="Section" style={{ marginBottom: 4 }}>
         <button role="tab" aria-selected={view === 'payouts'} className={`admin-tab${view === 'payouts' ? ' on' : ''}`} onClick={() => setView('payouts')}>Payouts</button>
+        <button role="tab" aria-selected={view === 'deliveries'} className={`admin-tab${view === 'deliveries' ? ' on' : ''}`} onClick={() => setView('deliveries')}>Deliveries</button>
         <button role="tab" aria-selected={view === 'sweeps'} className={`admin-tab${view === 'sweeps' ? ' on' : ''}`} onClick={() => setView('sweeps')}>Sweeps</button>
         <button role="tab" aria-selected={view === 'refunds'} className={`admin-tab${view === 'refunds' ? ' on' : ''}`} onClick={() => setView('refunds')}>Refunds</button>
         <button role="tab" aria-selected={view === 'revenue'} className={`admin-tab${view === 'revenue' ? ' on' : ''}`} onClick={() => setView('revenue')}>Revenue</button>
       </div>
+      {view === 'deliveries' && <Deliveries onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'sweeps' && <Sweeps onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'refunds' && <Refunds onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'revenue' && <Revenue onAuthError={() => { api.setKey(''); setAuthed(false); }} />}

@@ -12,6 +12,7 @@ export interface ServerPayout {
 }
 
 export interface ServerOrder {
+  tab: 'sell';
   id: string;
   status: 'awaiting_deposit' | 'processing' | 'underpaid';
   payout: ServerPayout | null;
@@ -25,6 +26,28 @@ export interface ServerOrder {
   hold: { message: string; until: number | null } | null;
   /** a crypto refund of this order's deposit; null when there is none */
   refund: { status: 'requested' | 'approved' | 'sent'; txHash: string | null } | null;
+}
+
+/** How the customer approves a purchase's payment, from the payment provider's configuration. */
+export interface BuyMethod { authType: string; instructions: { en: string[]; fr: string[] } | null; codeInstructions: { en: string[]; fr: string[] } | null }
+
+/** Mirror of the Worker's BuyView (worker/buys.ts). */
+export interface ServerBuy {
+  tab: 'buy';
+  id: string;
+  status: 'created' | 'collecting' | 'collected' | 'delivered' | 'failed' | 'expired' | 'cancelled';
+  asset: string;
+  fcfa: number;
+  amountUnits: string;
+  destination: string;
+  expiresAt: number;
+  method: BuyMethod | null;
+  nextStep: string | null;
+  /** REDIRECT_AUTH (Wave): send the customer here to approve the payment */
+  authUrl: string | null;
+  failure: string | null;
+  txHash: string | null;
+  hold: { message: string } | null;
 }
 
 /** 1.5 -> "1.5", 0.000123 -> "0.000123" (never exponent notation, which the server rejects). */
@@ -46,17 +69,36 @@ export async function createServerOrder(o: Order): Promise<ServerOrder> {
   return (await res.json()) as ServerOrder;
 }
 
-export async function fetchServerOrder(id: string): Promise<ServerOrder | null> {
+export async function fetchServerOrder(id: string): Promise<ServerOrder | ServerBuy | null> {
   const res = await apiFetch(`/orders/${encodeURIComponent(id)}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as ServerOrder;
+  return (await res.json()) as ServerOrder | ServerBuy;
 }
 
-export async function listServerOrders(): Promise<ServerOrder[]> {
+/** The user's server orders: cash-outs and purchases. */
+export async function listServerOrders(): Promise<{ orders: ServerOrder[]; buys: ServerBuy[] }> {
   const res = await apiFetch('/orders');
   if (!res.ok) throw new Error(await readError(res));
-  return ((await res.json()) as { orders: ServerOrder[] }).orders;
+  const j = (await res.json()) as { orders: ServerOrder[]; buys?: ServerBuy[] };
+  return { orders: j.orders, buys: j.buys ?? [] };
+}
+
+/** Registers a purchase (the quote is fixed, nothing is charged yet). Idempotent per order id. */
+export async function createServerBuy(o: Order): Promise<ServerBuy> {
+  const res = await apiFetch('/orders', {
+    method: 'POST',
+    body: JSON.stringify({ id: o.id, tab: 'buy', asset: o.from.sym, amountFcfa: Math.round(o.amount), destination: o.wallet, providerId: o.provider?.id, phone: o.phone }),
+  });
+  if (!res.ok) throw new Error(res.status === 401 ? tr('Please sign in again to continue.') : await readError(res));
+  return (await res.json()) as ServerBuy;
+}
+
+/** Starts the mobile money payment. For Orange Burkina Faso the one-time code goes along. */
+export async function payServerBuy(id: string, preAuthCode?: string): Promise<ServerBuy> {
+  const res = await apiFetch(`/orders/${encodeURIComponent(id)}/pay`, { method: 'POST', body: JSON.stringify(preAuthCode ? { preAuthCode } : {}) });
+  if (!res.ok) throw new Error(res.status === 401 ? tr('Please sign in again to continue.') : await readError(res));
+  return (await res.json()) as ServerBuy;
 }
 
 /** The patch to apply to a local order so it mirrors the server's view; null when nothing changed. */
@@ -68,5 +110,14 @@ export function patchFromServer(o: Order, s: ServerOrder): Partial<Order> | null
   return Object.keys(patch).length ? patch : null;
 }
 
+/** The patch to apply to a local purchase so it mirrors the server's view; null when nothing changed. */
+export function patchFromServerBuy(o: Order, b: ServerBuy): Partial<Order> | null {
+  const same = o.buy && o.buy.status === b.status && o.buy.authUrl === b.authUrl && o.buy.nextStep === b.nextStep && o.buy.failure === b.failure && o.buy.txHash === b.txHash && (o.buy.hold?.message ?? null) === (b.hold?.message ?? null) && o.buy.amountUnits === b.amountUnits;
+  if (same) return null;
+  const patch: Partial<Order> = { buy: b };
+  if (b.status === 'collected' && o.startedAt === null) patch.startedAt = Date.now();
+  return patch;
+}
+
 /** Terminal server states: nothing more to poll for. */
-export const isSettled = (o: Order) => !!o.server && (o.server.status === 'underpaid' || ['paid', 'failed', 'rejected'].includes(o.server.payout ?? ''));
+export const isSettled = (o: Order) => (o.tab === 'buy' && !!o.buy && ['delivered', 'failed', 'expired', 'cancelled'].includes(o.buy.status)) || !!o.server && (o.server.status === 'underpaid' || ['paid', 'failed', 'rejected'].includes(o.server.payout ?? ''));

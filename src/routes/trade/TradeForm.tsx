@@ -52,7 +52,7 @@ export default function TradeForm() {
   const zero = parseAmount(t.amount) <= 0;
   // buying to a network where the user has no wallet (e.g. Bitcoin) needs an address first
   // live payouts go to a number the user typed; demo mode falls back to the placeholder number
-  const needPhone = tab === 'sell' && auth.mode === 'privy' && t.amountOk && !!t.provider && !(t.phone && validPhone(t.phone));
+  const needPhone = tab !== 'swap' && auth.mode === 'privy' && t.amountOk && !!t.provider && !(t.phone && validPhone(t.phone));
   const needWallet = tab === 'buy' && !!t.wallet.missing && t.amountOk && !!t.provider;
   // transaction limits (see lib/limits.ts): checked against the FCFA value of this order
   const breach = zero ? null : limits.check(q.fcfaGross);
@@ -108,6 +108,8 @@ export default function TradeForm() {
         <>
           {tab === 'sell' ? (
             <FieldRow label={tl('Cash out to mobile money number')} value={t.phone ?? (auth.mode === 'privy' ? tl('Add your number') : t.provider.number)} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
+          ) : auth.mode === 'privy' ? (
+            <FieldRow label={tl('Pay from mobile money number')} value={t.phone ?? tl('Add your number')} hint={t.provider.name} onClick={() => setPhoneOpen(true)} />
           ) : (
             <FieldRow label={tl('Mobile money number')} value={t.provider.number} hint={t.provider.name} />
           )}

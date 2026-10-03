@@ -4,7 +4,7 @@ import { PLATFORM_FEE, PSP_FEE, TOTAL_FEE } from './pricing';
  * Revenue from payouts (cash-outs): the customer pays 5% of an order's value, 2.5% to Relay (platform fee) and 2.5% to the
  * payment provider (PSP fee, passed through). It is recognised when the payout is PAID; payouts still moving are reported as
  * pending, and failed or rejected ones earn nothing. Amounts come from the split stored on each payout when it was created.
- * Sells only: buys and swaps aren't server orders yet, so their fees aren't here. Payouts created before migration 0007 have
+ * Buys (purchases) are included too: their fees are recognised when the crypto is DELIVERED; a payment collected but not yet delivered is pending. Swaps aren't server orders. Payouts created before migration 0007 have
  * no split and are counted separately.
  */
 export interface Totals { count: number; grossFcfa: number; platformFeeFcfa: number; pspFeeFcfa: number; payoutFcfa: number }
@@ -18,12 +18,28 @@ export interface Revenue {
 	daily: DayRow[];
 	byAsset: Breakdown[];
 	byOperator: Breakdown[];
+	/** sells (cash-outs) and buys (purchases) separately: buys earn their fees when the crypto is DELIVERED */
+	byType: Breakdown[];
 	/** paid payouts without a fee split (created before migration 0007) */
 	uncountedPaid: number;
 }
 
 const COLS = `COUNT(*) AS count, COALESCE(SUM(p.gross_fcfa), 0) AS grossFcfa, COALESCE(SUM(p.platform_fee_fcfa), 0) AS platformFeeFcfa,
 	COALESCE(SUM(p.psp_fee_fcfa), 0) AS pspFeeFcfa, COALESCE(SUM(p.amount_fcfa), 0) AS payoutFcfa`;
+
+const merge = <T extends Totals>(a: T[], b: T[], key: (x: T) => string): T[] => {
+	const m = new Map<string, T>();
+	for (const x of [...a, ...b]) {
+		const k = key(x), cur = m.get(k);
+		m.set(k, cur ? { ...cur, count: cur.count + x.count, grossFcfa: cur.grossFcfa + x.grossFcfa, platformFeeFcfa: cur.platformFeeFcfa + x.platformFeeFcfa, pspFeeFcfa: cur.pspFeeFcfa + x.pspFeeFcfa, payoutFcfa: cur.payoutFcfa + x.payoutFcfa } : x);
+	}
+	return [...m.values()];
+};
+const add = (a: Totals, b: Totals): Totals => ({ count: a.count + b.count, grossFcfa: a.grossFcfa + b.grossFcfa, platformFeeFcfa: a.platformFeeFcfa + b.platformFeeFcfa, pspFeeFcfa: a.pspFeeFcfa + b.pspFeeFcfa, payoutFcfa: a.payoutFcfa + b.payoutFcfa });
+
+// the same columns for buys: what the customer received in crypto, valued in FCFA, is the amount paid minus every fee
+const BUY_COLS = `COUNT(*) AS count, COALESCE(SUM(b.fcfa), 0) AS grossFcfa, COALESCE(SUM(b.platform_fee_fcfa), 0) AS platformFeeFcfa,
+	COALESCE(SUM(b.psp_fee_fcfa), 0) AS pspFeeFcfa, COALESCE(SUM(b.fcfa - b.platform_fee_fcfa - b.psp_fee_fcfa - b.network_fee_fcfa), 0) AS payoutFcfa`;
 
 export async function revenueReport(env: Env, days: number, now = Date.now()): Promise<Revenue> {
 	const since = days > 0 ? now - days * 86_400_000 : 0;
@@ -36,14 +52,25 @@ export async function revenueReport(env: Env, days: number, now = Date.now()): P
 		env.DB.prepare(`SELECT COALESCE(p.operator, 'unknown') AS key, ${COLS} FROM payouts p WHERE ${paidWhere} GROUP BY p.operator ORDER BY SUM(p.platform_fee_fcfa) DESC`).bind(since),
 		env.DB.prepare(`SELECT COUNT(*) AS n FROM payouts p WHERE p.status = 'paid' AND p.gross_fcfa IS NULL AND p.paid_at >= ?`).bind(since),
 	]);
+	const delivered = `b.status = 'delivered' AND b.delivered_at >= ?`;
+	const [bPaid, bPending, bDaily, bAsset, bOperator] = await env.DB.batch([
+		env.DB.prepare(`SELECT ${BUY_COLS} FROM buy_orders b WHERE ${delivered}`).bind(since),
+		env.DB.prepare(`SELECT ${BUY_COLS} FROM buy_orders b WHERE b.status = 'collected'`),
+		env.DB.prepare(`SELECT strftime('%Y-%m-%d', b.delivered_at / 1000, 'unixepoch') AS day, ${BUY_COLS} FROM buy_orders b WHERE ${delivered} GROUP BY day ORDER BY day`).bind(since),
+		env.DB.prepare(`SELECT b.asset AS key, ${BUY_COLS} FROM buy_orders b WHERE ${delivered} GROUP BY b.asset`).bind(since),
+		env.DB.prepare(`SELECT b.operator AS key, ${BUY_COLS} FROM buy_orders b WHERE ${delivered} GROUP BY b.operator`).bind(since),
+	]);
+	const sellPaid = paid!.results[0] as unknown as Totals, buyPaid = bPaid!.results[0] as unknown as Totals;
+	const byOp = merge(byOperator!.results as unknown as Breakdown[], bOperator!.results as unknown as Breakdown[], (x) => x.key);
 	return {
+		byType: [{ key: 'sell', ...sellPaid }, { key: 'buy', ...buyPaid }].filter((x) => x.count > 0),
 		feeRates: { platform: PLATFORM_FEE, psp: PSP_FEE, total: TOTAL_FEE },
 		days,
-		paid: paid!.results[0] as unknown as Totals,
-		pending: pending!.results[0] as unknown as Totals,
-		daily: daily!.results as unknown as DayRow[],
-		byAsset: byAsset!.results as unknown as Breakdown[],
-		byOperator: byOperator!.results as unknown as Breakdown[],
+		paid: add(sellPaid, buyPaid),
+		pending: add(pending!.results[0] as unknown as Totals, bPending!.results[0] as unknown as Totals),
+		daily: merge(daily!.results as unknown as DayRow[], bDaily!.results as unknown as DayRow[], (x) => x.day).sort((x, y) => x.day.localeCompare(y.day)),
+		byAsset: merge(byAsset!.results as unknown as Breakdown[], bAsset!.results as unknown as Breakdown[], (x) => x.key).sort((x, y) => y.platformFeeFcfa - x.platformFeeFcfa),
+		byOperator: byOp.sort((x, y) => y.platformFeeFcfa - x.platformFeeFcfa),
 		uncountedPaid: (legacy!.results[0] as { n: number }).n,
 	};
 }
