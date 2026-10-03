@@ -13,6 +13,7 @@
 .page.pool { max-width: 560px; gap: 12px; }
 /* trade card sits in the vertical middle of the free space; auto margins fall back to top-aligned when the content is taller than the screen */
 .page.trade { margin-block: auto; padding-bottom: 4vh; }
+@media (max-width: 679px) { .page.trade { margin-block: 0 auto; padding-top: 8px; } }  /* phones: anchored to the top, so screens of different heights don't jump and the form isn't pushed down by empty space */
 
 .tabbar { flex: none; display: flex; background: var(--bd); border-top: 1px solid var(--ln); padding: 0 8px max(12px, env(safe-area-inset-bottom)); }
 .tabbar a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 0 4px; color: var(--fnt); font-weight: 600; font-size: 11px; text-decoration: none; }
@@ -49,13 +50,14 @@
 .pill.mono { font-family: 'Space Mono', monospace; font-size: 12px; }
 
 /* ---------- trade card ---------- */
-.shell { background: var(--sh); border-radius: 24px; padding: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(23,21,28,.06); }
+.shell { background: var(--sh); border-radius: 16px; padding: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(23,21,28,.06); }
 .ftabs { display: flex; }
-.ftab { flex: 1; text-align: center; padding: 12px 0; border-radius: 16px 16px 0 0; font-weight: 700; font-size: 13.5px; color: var(--mut); }
+.ftab { flex: 1; text-align: center; padding: 12px 0; border-radius: 12px 12px 0 0; font-weight: 700; font-size: 13.5px; color: var(--mut); }
 .ftab.on { background: var(--bd); color: var(--ink); }
-.body { background: var(--bd); padding: 16px; border-radius: 18px; }
-.body.swap { border-radius: 0 18px 18px 18px; }
-.body.sell { border-radius: 18px 0 18px 18px; }
+.body { background: var(--bd); padding: 16px; border-radius: 12px; }
+/* the active tab is attached to the card: its corner is square (tabs are Sell, Buy, Swap) */
+.body.sell { border-radius: 0 12px 12px 12px; }
+.body.swap { border-radius: 12px 0 12px 12px; }
 .foot { text-align: center; font-size: 12px; color: var(--fnt); }
 
 .amt { display: flex; align-items: center; gap: 12px; background: var(--rw); border: 1.5px solid transparent; border-radius: 14px; padding: 12px 12px 12px 16px; }
@@ -102,11 +104,11 @@ button.chip { cursor: pointer; }
 .tl-row svg { flex: none; }
 
 .sec-label { font-weight: 700; font-size: 12.5px; margin: 14px 2px 8px; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(54px, auto); gap: 8px; }  /* equal tile heights even when a name wraps */
 .prov { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 12px; background: var(--rw); border: 1.5px solid transparent; }
 .prov.on { background: var(--accs); border-color: var(--acc); }
 .prov-dot { flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; }
-.prov-name { flex: 1; font-weight: 600; font-size: 13px; }
+.prov-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13px; line-height: 1.2; }
 .prov-mark { font-weight: 800; font-size: 12px; color: var(--acct); }
 
 .field { background: var(--rw); border-radius: 12px; padding: 11px 16px; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
@@ -117,7 +119,7 @@ button.chip { cursor: pointer; }
 .agree { margin: 18px 0 10px; text-align: center; font-size: 12px; color: var(--mut); }
 .note { margin-top: 10px; text-align: center; font-size: 12px; color: var(--mut); }
 
-.btn { display: block; width: 100%; background: var(--cta); color: var(--ctai); border-radius: 12px; padding: 15px 0; text-align: center; font-weight: 700; font-size: 14.5px; }
+.btn { display: block; width: 100%; background: var(--cta); color: var(--ctai); border-radius: 12px; padding: 15px 16px; text-align: center; font-weight: 700; font-size: 14.5px; }
 .btn:hover { opacity: .88; }
 .btn:disabled { background: var(--sh); color: var(--mut); cursor: not-allowed; }  /* a muted fill with a readable label, not a faded one: the label often says what to do next */
 .btn:disabled:hover { opacity: 1; }
@@ -127,8 +129,8 @@ button.chip { cursor: pointer; }
 .btn.sec[aria-busy='true']:disabled { background: var(--rw); color: var(--ink); }
 .btn.acc { background: var(--acc); color: #fff; }
 .btn.acc:hover { opacity: .9; }
-.btn.sec { background: var(--rw); color: var(--ink); padding: 14px 0; font-size: 14px; }
-.btn.sm { padding: 13px 0; font-size: 14px; }
+.btn.sec { background: var(--rw); color: var(--ink); padding: 14px 16px; font-size: 14px; }
+.btn.sm { padding: 13px 16px; font-size: 14px; }
 .btn.fit { display: inline-block; width: auto; padding: 12px 28px; font-size: 13.5px; }
 
 /* ---------- flow screens ---------- */
@@ -188,14 +190,14 @@ button.chip { cursor: pointer; }
 .promo h2 { margin: 0; font-weight: 800; font-size: 19px; letter-spacing: -.01em; }
 .promo p { margin: 8px 0 0; font-size: 13px; line-height: 1.55; opacity: .8; }
 .promo .apy { margin-top: 12px; font-weight: 700; font-size: 12.5px; color: var(--acct); }
-.promo .btn { margin-top: 16px; padding: 13px 0; font-size: 14px; }
+.promo .btn { margin-top: 16px; padding: 13px 16px; font-size: 14px; }
 .pos-top { display: flex; justify-content: space-between; align-items: center; }
 .earning { font-weight: 700; font-size: 11px; color: var(--acct); background: var(--accs); border-radius: 999px; padding: 4px 10px; }
 .pos-mid { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 14px; gap: 12px; }
 .pos-big { font-weight: 800; font-size: 24px; }
 .sub { font-size: 12px; color: var(--mut); margin-top: 2px; }
 .pos-btns { display: flex; gap: 10px; margin-top: 16px; }
-.pos-btns .btn { padding: 12px 0; font-size: 13.5px; }
+.pos-btns .btn { padding: 12px 16px; font-size: 13.5px; }
 .links { display: flex; justify-content: center; gap: 18px; margin-top: 13px; font-weight: 700; font-size: 12.5px; color: var(--acct); }
 .links .sep { color: var(--fnt); }
 .pools { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
@@ -229,8 +231,10 @@ button.chip { cursor: pointer; }
 .chart { display: flex; align-items: flex-end; gap: 5px; height: 52px; margin: 14px 24px 4px; }
 .chart i { flex: 1; border-radius: 4px 4px 0 0; background: var(--accs); }
 .chart i:last-child { background: var(--acc); }
-.hist-r { display: flex; justify-content: space-between; align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--ln); }
-.hist-r:last-child { border-bottom: 0; }
+.hist-r { display: flex; align-items: center; gap: 12px; padding: 12px 8px; margin: 0 -8px; min-height: 68px; border-radius: 12px; }
+.hist-r:hover, .hist-r:active { background: var(--rw); color: inherit; text-decoration: none; }  /* the global link hover (purple, underlined) is not for rows */
+.hist-r:focus-visible { background: var(--rw); outline-offset: -2px; }
+
 
 /* ---------- sheet ---------- */
 .scrim { position: fixed; inset: 0; z-index: 50; background: rgba(13,12,16,.45); display: flex; align-items: flex-end; justify-content: center; }
@@ -390,3 +394,20 @@ input.amt-val { min-height: 32px; }
 .amt-sub .amt-fix { display: block; padding: 9px 0 3px; color: var(--acct); font-weight: 700; }  /* always on its own line: a bigger, steadier target */
 .help-link { display: block; margin: 10px auto 0; padding: 8px 12px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--mut); text-decoration: underline; text-underline-offset: 3px; }
 .help-link:hover { color: var(--ink); }
+
+/* Activity row: title, then a status + date line, amounts on the right with a chevron that says "opens" */
+.hist-main { flex: 1; min-width: 0; }
+.hist-title { font-weight: 700; font-size: 14px; }
+.hist-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 5px; font-size: 12px; color: var(--mut); }
+.hist-meta .tag-s { margin-left: 0; }
+.hist-amt { flex: none; display: flex; align-items: center; gap: 8px; text-align: right; white-space: nowrap; }
+.hist-to { font-weight: 800; font-size: 14px; }
+.hist-from { margin-top: 3px; font-size: 12px; color: var(--mut); }
+.hist-chev { color: var(--fnt); font-weight: 600; }
+
+/* Activity: day headers, a leading asset avatar with what happened to it (out / in / between assets) */
+.hist-day { margin: 16px 0 2px; font-size: 12px; font-weight: 700; color: var(--mut); }
+.hist-day:first-child { margin-top: 6px; }
+.hist-av { position: relative; flex: none; display: flex; }
+.hist-dir { position: absolute; right: -3px; bottom: -3px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; line-height: 1; color: #fff; background: var(--ink); border: 2px solid var(--bd); }
+:root[data-theme='dark'] .hist-dir { color: var(--pg); }

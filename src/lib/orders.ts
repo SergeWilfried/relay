@@ -83,7 +83,7 @@ export function buildOrder(tab: Tab, from: Asset, to: Asset, provider: Provider 
   return { ...base, quote: quoteWithNumber,
     title: tr('Cashing out…'), doneTitle: tr('Cash out sent'), sub: `${from.sym} → FCFA`,
     doneSub: tr('{amount} on the way to {provider}', { amount: quote.summaryTo, provider: p.name }),
-    steps: [[tr('Deposit received'), tr('{amount} confirmed on-chain', { amount: quote.summaryFrom })], [tr('Sold at market'), tr('{gross} FCFA settled', { gross })], [tr('Sent to {provider}', { provider: p.name }), number]] };
+    steps: [[tr('Deposit received'), tr('{amount} confirmed on-chain', { amount: quote.summaryFrom })], [tr('Sold at market'), tr('{amount} after fees', { amount: quote.summaryTo })], [tr('Sent to {provider}', { provider: p.name }), number]] };
 }
 
 /** Turn a locked draft into a live order. Sell orders wait for the on-chain deposit first. */

@@ -6,6 +6,8 @@ import { feesOn, floor100, NETWORK_FEE_FCFA, TOTAL_FEE } from './fees';
 export const shortAddr = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 const pct = (r: number) => localizePct(`${r * 100}%`);
 /** One fee line for customers: the 2.5% platform fee and the 2.5% provider fee are shown as a single 5% (the split is admin-only). */
+/** The fee line under the rate: the amount is only shown once there is an amount ("5 % · 0 FCFA" on an empty form is noise). */
+const feeText = (fee: number) => (fee > 0 ? tr('Fee: {rate} · {amount} FCFA', { rate: pct(TOTAL_FEE), amount: fmtInt(fee) }) : tr('Fee: {rate}', { rate: pct(TOTAL_FEE) }));
 const feeRow = (gross: number): [string, string] => [tr('Fee'), `${pct(TOTAL_FEE)} · ${fmtInt(feesOn(gross).total)} FCFA`];
 
 export interface QuoteInput {
@@ -79,7 +81,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
       fromAmt: fmtInt(amount), toAmt: fmtCrypto(recv, crypto.dec, crypto.dec),
       fromSub: p ? `${p.name} ${p.number} · ${tr('instant')}` : tr('Pay from mobile money'),
       toSub: `≈ ${fmtInt(floor100(net))} FCFA ${tr('after fees')}`,
-      rate, fee: tr('Fee: {rate} · {amount} FCFA', { rate: pct(TOTAL_FEE), amount: fmtInt(fee) }),
+      rate, fee: feeText(fee),
       rows: [
         [tr('Rate'), rate],
         feeRow(amount),
@@ -102,7 +104,7 @@ export function getQuote(input: QuoteInput, provider: Provider | null, wallet: s
     fromAmt: fmtCrypto(amount, 2, 8), toAmt: fmtInt(get),
     fromSub: `${tr('Balance')} ${balText} ${crypto.sym} · Max`,
     toSub: tr('Arrives in 1–2 minutes'),
-    rate, fee: tr('Fee: {rate} · {amount} FCFA', { rate: pct(TOTAL_FEE), amount: fmtInt(fee) }),
+    rate, fee: feeText(fee),
     rows: [
       [tr('Rate'), rate],
       feeRow(gross),

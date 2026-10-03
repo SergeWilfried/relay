@@ -484,4 +484,9 @@ export const app: Record<string, string> = {
   "About 2 minutes, usually instant. The rate is refreshed when you come back.": "Environ 2 minutes, souvent instantané. Le cours est actualisé à votre retour.",
   "Use the maximum": "Utiliser le maximum",
   "Need help?": "Besoin d’aide ?",
+  "Fee: {rate}": "Frais : {rate}",
+  "{amount} after fees": "{amount} après frais",
+  "Sale": "Vente",
+  "Purchase": "Achat",
+  "Yesterday": "Hier",
 };
