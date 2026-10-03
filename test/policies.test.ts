@@ -57,9 +57,9 @@ test('user policies allow by wildcard and restrict only with DENY rules (a loose
     assert.ok(p.body.rules.filter((r) => r.action === 'DENY').length >= 2);
   }
 });
-test('tier caps rise with the tier and stablecoin caps are exact (50 / 500 / 5000 USD at 6 decimals)', () => {
-  const caps = [0, 1, 2].map((t) => user.find((p) => p.env === `PRIVY_POLICY_TIER${t}_EVM`)!.body.rules.find((r) => r.name.includes('USDT'))!.conditions.find((c) => c.field === 'transfer.amount')!.value);
-  assert.deepEqual(caps, ['50000000', '500000000', '5000000000']);
+test('tier caps are the tiers\' per-transaction limits in USD (unverified 200 000 FCFA, verified 2 000 000 FCFA at 600 FCFA per USD, rounded up)', () => {
+  const caps = [0, 1].map((t) => user.find((p) => p.env === `PRIVY_POLICY_TIER${t}_EVM`)!.body.rules.find((r) => r.name.includes('USDT'))!.conditions.find((c) => c.field === 'transfer.amount')!.value);
+  assert.deepEqual(caps, ['334000000', '3334000000']);
 });
 test('unlimited approvals are denied on every EVM tier policy (P-02)', () => {
   for (const p of user.filter((x) => x.env.endsWith('_EVM') && x.env.includes('TIER'))) {

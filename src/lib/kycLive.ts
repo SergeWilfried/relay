@@ -37,3 +37,4 @@ export async function syncKyc(): Promise<KycInfo> {
   await ok(res);
   return (await res.json()) as KycInfo;
 }
+

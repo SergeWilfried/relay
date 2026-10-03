@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { evaluate, RULES, windowStarts, type BaseFacts, type Rule } from '../worker/rules.ts';
 
 const base: BaseFacts = {
-  amount_fcfa: 500_000, country: 'CI', user_status: 'normal', account_age_days: 90, tier: 0,
+  amount_fcfa: 500_000, country: 'CI', user_status: 'normal', account_age_days: 90, tier: 1,
   day_fcfa: 0, month_fcfa: 0, open_orders: 0, orders_last_hour: 0,
   country_changed: false, payout_number_changed: false, prior_near_limit_7d: 0, clef_flag_active: false, payout_number_denied: false, kyc_approved: true,
 };
@@ -115,6 +115,22 @@ test('K-01: above the KYC threshold without an approved check is denied; at or b
   assert.equal(run({ kyc_approved: false, amount_fcfa: 200_000 }).action, 'allow'); // "above 200,000": the limit itself is fine
   assert.equal(run({ kyc_approved: false, amount_fcfa: 5_000 }).action, 'allow');
   assert.equal(run({ kyc_approved: true, amount_fcfa: 1_900_000 }).action, 'allow');
+});
+
+test('K-01 also counts the day: small orders that add up past the threshold cannot dodge the check', () => {
+  const split = run({ kyc_approved: false, tier: 0, amount_fcfa: 100_000, day_fcfa: 100_001 });
+  assert.ok(split.action === 'deny' && split.ruleIds[0] === 'K-01' && split.message === 'Verify your identity to continue.', 'verify is asked before any limit message');
+  assert.equal(run({ kyc_approved: false, tier: 0, amount_fcfa: 100_000, day_fcfa: 100_000 }).action, 'allow', 'exactly the threshold in total is fine');
+  assert.equal(run({ kyc_approved: true, amount_fcfa: 100_000, day_fcfa: 1_000_000 }).action, 'allow');
+});
+
+test('tier limits: unverified is capped at the KYC threshold per order and day as a backstop (even with K-01 in shadow), verified at 2M / 10M', () => {
+  const shadow = { modes: { 'K-01': 'shadow' as const } };
+  const o = run({ kyc_approved: false, tier: 0, amount_fcfa: 300_000 }, shadow);
+  assert.ok(o.action === 'deny' && o.ruleIds.join() === 'R-03,R-04');
+  assert.deepEqual([o.limits.perTx, o.limits.daily, o.limits.monthly], [200_000, 200_000, 10_000_000]);
+  const v = run({ amount_fcfa: 2_000_000 });
+  assert.deepEqual([v.limits.perTx, v.limits.daily, v.limits.monthly], [2_000_000, 2_000_000, 10_000_000]);
 });
 
 test('K-01 in shadow mode is logged but does not block', () => {

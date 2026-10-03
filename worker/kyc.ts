@@ -4,7 +4,7 @@
  * Orders above KYC_THRESHOLD_FCFA need an approved check (rule K-01 in worker/rules.ts).
  */
 import { alert } from './alerts';
-import { KYC_THRESHOLD_FCFA } from './rules';
+import { KYC_THRESHOLD_FCFA } from './limits';
 import { createSumsubClient, levelOf, sumsubConfigured, SumsubError, type SumsubApplicant, type SumsubClient } from './kyc/sumsub';
 import { eventTime, statusFromEvent, verifyWebhook, type KycStatus, type SumsubEvent } from './kyc/sumsubSign';
 

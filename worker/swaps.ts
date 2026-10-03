@@ -1,6 +1,6 @@
 import { notify } from './notify';
 import { fcfaValue } from './pricing';
-import { ensureProfile, evaluate, loadFacts, loadModes, logDecision, RuleDenied } from './rules';
+import { ensureProfile, evaluate, LIMIT_GUARD, loadFacts, loadModes, logDecision, RuleDenied, windowStarts } from './rules';
 import { createPrivySwapClient, PrivySwapError, type PrivySwapClient, type SwapAction } from './swap/privy';
 import { fromBaseUnits, planSwap, SWAP_ASSETS, type SwapWallets } from './swapPlan';
 
@@ -114,10 +114,14 @@ export async function createSwap(env: Env, userId: string, input: { id: unknown;
 	}
 	await logDecision(env, { userId, orderId: id, outcome });
 
-	await env.DB.prepare(
+	// the daily and monthly checks are repeated INSIDE the insert (like sells and buys), so two swaps racing past the read above can't both fit
+	const w = windowStarts(now);
+	const ins = await env.DB.prepare(
 		`INSERT INTO swap_orders (id, user_id, wallet_id, from_asset, to_asset, input_units, cross_chain, slippage_bps, fcfa_value, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, ?)`,
-	).bind(id, userId, plan.req.walletId, plan.from.sym, plan.to.sym, plan.req.body.base_amount, plan.req.crossChain ? 1 : 0, slippage, value, now, now).run();
+		 SELECT ?8, ?1, ?9, ?10, ?11, ?12, ?13, ?14, ?5, 'created', ?2, ?2
+		 WHERE ${LIMIT_GUARD}`,
+	).bind(userId, now, w.day, w.month, value, outcome.limits.daily, outcome.limits.monthly, id, plan.req.walletId, plan.from.sym, plan.to.sym, plan.req.body.base_amount, plan.req.crossChain ? 1 : 0, slippage).run();
+	if (ins.meta.changes === 0) throw new RuleDenied('Daily limit reached', 422, ['R-04']);
 
 	// what we expect to receive, for the record (a failed quote here must not block the swap: Privy quotes again when it executes)
 	let quoted: { est: string; min: string } | null = null;

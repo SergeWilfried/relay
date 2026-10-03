@@ -12,6 +12,7 @@ function db() {
   const d = new DatabaseSync(':memory:');
   d.exec(`CREATE TABLE orders (id TEXT, user_id TEXT, amount_fcfa INTEGER, status TEXT, expires_at INTEGER, created_at INTEGER);
     CREATE TABLE payouts (order_id TEXT, status TEXT);
+    CREATE TABLE swap_orders (id TEXT, user_id TEXT, fcfa_value INTEGER, status TEXT, created_at INTEGER);
     CREATE TABLE buy_orders (id TEXT PRIMARY KEY, user_id TEXT, asset TEXT, network TEXT, fcfa INTEGER, platform_fee_fcfa INTEGER, psp_fee_fcfa INTEGER, network_fee_fcfa INTEGER, amount_units TEXT, destination TEXT,
       operator TEXT, provider_code TEXT, phone TEXT, status TEXT, auth_type TEXT, hold_rules TEXT, hold_message TEXT, hold_until INTEGER, expires_at INTEGER, created_at INTEGER, updated_at INTEGER);`);
   return d;
@@ -69,4 +70,20 @@ test('rejected and failed payouts of sells do not count, and other users are ind
   sell(d, 's2', 1_900_000, { user: 'u2' });
   assert.equal(tryBuy(d, 'b1', 2_000_000), true);
   assert.equal(tryBuy(d, 'b2', 100_000, 'u3'), true);
+});
+
+const swap = (d: DatabaseSync, id: string, fcfa: number, status: string, over: { user?: string; created?: number } = {}) =>
+  d.prepare('INSERT INTO swap_orders VALUES (?, ?, ?, ?, ?)').run(id, over.user ?? 'u1', fcfa, status, over.created ?? NOW - 1000);
+
+test('swaps count toward the same limits (the Account page counts them too); failed and rejected swaps never moved value', () => {
+  const d = db();
+  swap(d, 'w1', 1_500_000, 'succeeded');
+  assert.equal(tryBuy(d, 'b1', 600_000), false, 'a succeeded swap uses the daily limit');
+  swap(d, 'w2', 1_900_000, 'failed', { user: 'u2' });
+  swap(d, 'w3', 1_900_000, 'rejected', { user: 'u2' });
+  assert.equal(tryBuy(d, 'b2', 2_000_000, 'u2'), true, 'failed and rejected swaps do not count');
+  swap(d, 'w4', 1_000_000, 'submitted', { user: 'u3' });
+  assert.equal(tryBuy(d, 'b3', 1_100_000, 'u3'), false, 'a swap still in flight counts');
+  swap(d, 'w5', 9_000_000, 'succeeded', { user: 'u4', created: Date.UTC(2026, 9, 2) });
+  assert.equal(tryBuy(d, 'b4', 1_100_000, 'u4'), false, 'monthly: earlier days of the month count');
 });

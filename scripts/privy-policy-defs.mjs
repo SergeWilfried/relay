@@ -8,16 +8,25 @@
 //  - several ALLOW rules for one method are OR-ed, so a loose ALLOW "overrides" a strict one. Every restriction must
 //    therefore live INSIDE the ALLOW rule's own conditions (AND), never in a separate ALLOW rule.
 //
-// Caps are generous multiples of the largest order (2M FCFA at today's placeholder rates: ~1.2 ETH, ~3 333 USDT/USDC,
-// ~24 SOL), so rate drift never blocks a legitimate sweep. A deposit wallet only ever holds one order's deposit.
+// Caps are DERIVED from the limits in worker/limits.ts (the single source of truth): DEPOSIT_HEADROOM times the verified per-transaction
+// limit, converted at the reference rates in worker/pricing.ts, so rate drift never blocks a legitimate sweep. A deposit wallet only
+// ever holds one order's deposit. Change a limit there and these follow (re-run this script with --apply to push them to Privy).
+import { DEPOSIT_HEADROOM, LIMITS } from '../worker/limits.ts';
+import { FCFA_PER_UNIT } from '../worker/pricing.ts';
 
 export const USDT = '0xdac17f958d2ee523a2206206994597c13d831ec7';
 export const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
 
+const DEPOSIT_CAP_FCFA = BigInt(Math.ceil(LIMITS.verified.perTx * DEPOSIT_HEADROOM));
+/** FCFA -> base units of an asset at its reference rate, rounded up (a cap is never tighter than the limit it protects). */
+const fcfaToUnits = (fcfa, rate, decimals) => {
+  const r = BigInt(Math.round(rate * 1000)); // keep 3 decimals of the rate
+  return ((fcfa * 10n ** BigInt(decimals) * 1000n + r - 1n) / r).toString();
+};
 export const CAPS = {
-  ethWei: '2000000000000000000',     // 2 ETH
-  stableUnits: '5000000000',          // 5 000 USDT / USDC (6 decimals)
-  solLamports: '40000000000',         // 40 SOL
+  ethWei: fcfaToUnits(DEPOSIT_CAP_FCFA, FCFA_PER_UNIT.ETH, 18),
+  stableUnits: fcfaToUnits(DEPOSIT_CAP_FCFA, FCFA_PER_UNIT.USDT, 6),   // USDT and USDC share one rate
+  solLamports: fcfaToUnits(DEPOSIT_CAP_FCFA, FCFA_PER_UNIT.SOL, 9),
 };
 
 const ERC20_TRANSFER_ABI = [{
@@ -110,11 +119,12 @@ export function buildPolicies({ treasuryEvm, treasurySol } = {}) {
 // Caps apply to ANY recipient: the matrix caps only "non-allowlisted" addresses, but there is no allowlist yet.
 // ---------------------------------------------------------------------------------------------------------------
 
-/** Reference prices used to turn USD caps into wei / lamports. PLACEHOLDERS matching the app's mock rates (600 FCFA per USD):
+/** Reference prices used to turn USD caps into wei / lamports. PLACEHOLDERS from worker/pricing.ts (600 FCFA per USD):
  *  the ETH and SOL caps drift with the real price, so refresh them from a price feed before relying on them. Stablecoin caps are exact. */
-export const REF_USD = { ETH: 2754, SOL: 140 };
-/** Per-transfer USD caps by KYC tier (P-03, P-04, P-05). */
-export const TIER_CAP_USD = [50, 500, 5000];
+export const FCFA_PER_USD = FCFA_PER_UNIT.USDT;
+export const REF_USD = { ETH: Math.round(FCFA_PER_UNIT.ETH / FCFA_PER_USD), SOL: Math.round(FCFA_PER_UNIT.SOL / FCFA_PER_USD) };
+/** Per-transfer USD caps by tier (P-03 unverified, P-04 verified): each tier's per-transaction limit in FCFA, rounded UP to whole USD. */
+export const TIER_CAP_USD = [LIMITS.unverified.perTx, LIMITS.verified.perTx].map((fcfa) => Math.ceil(fcfa / FCFA_PER_USD));
 
 const MAX_SAFE_APPROVAL = (2n ** 128n).toString(); // anything at or above this is an "unlimited" approval
 

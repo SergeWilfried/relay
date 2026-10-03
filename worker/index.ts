@@ -6,7 +6,7 @@ import { getDepositProvider } from './deposit';
 import { approveRefund, cancelRefund, checkStaleRefunds, createRefund, listEligible, listRefunds, markRefundSent, RefundError } from './refunds';
 import { checkFloat, loadFloat, reconcilePayouts, approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
 import { getProvider } from './payout';
-import { ensureProfile, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
+import { ensureProfile, loadLimitsView, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
 import { revenueReport } from './revenue';
 import { addEntry, ListError, listEntries, removeEntry, resyncEntries } from './lists';
 import { clearClefFlag, runPatternReview } from './clefBatch';
@@ -211,6 +211,19 @@ async function payoutWebhook(request: Request, env: Env): Promise<Response> {
 }
 
 /** Swap API (Privy's swap wallet action). Authenticated: a user only ever sees and swaps from their own wallets. */
+/** The user's effective limits and usage (server records: sells, buys and swaps, on every device). */
+async function limitsApi(request: Request, env: Env): Promise<Response> {
+	if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+	let userId: string;
+	try { userId = await authenticate(request, env); }
+	catch (e) {
+		if (e instanceof AuthError) return json({ error: e.message }, 401);
+		console.error(JSON.stringify({ msg: 'auth.misconfigured', error: e instanceof Error ? e.message : String(e) }));
+		return json({ error: 'Authentication is not configured' }, 500);
+	}
+	return json(await loadLimitsView(env, userId, Date.now()));
+}
+
 /** Identity verification API (Sumsub). Authenticated: the token and status are only ever for the caller. */
 async function kycApi(request: Request, env: Env, pathname: string): Promise<Response> {
 	let userId: string;
@@ -353,6 +366,7 @@ export default {
 			if (pathname === '/api/webhooks/deposit') return request.method === 'POST' ? await depositWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
 			if (pathname === '/api/webhooks/payout') return request.method === 'POST' ? await payoutWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
 			if (pathname === '/api/webhooks/sumsub') return request.method === 'POST' ? await sumsubWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
+			if (pathname === '/api/limits') return await limitsApi(request, env);
 			if (pathname.startsWith('/api/kyc/')) return await kycApi(request, env, pathname);
 			if (pathname === '/api/swap' || pathname.startsWith('/api/swap/')) return await swapApi(request, env, pathname);
 			if (pathname === '/api/orders' || pathname.startsWith('/api/orders/')) return await ordersApi(request, env, ctx, pathname);

@@ -11,6 +11,7 @@ import { createServerBuy, createServerOrder } from '../../lib/serverOrders';
 import { createServerSwap } from '../../lib/swapLive';
 import { useT } from '../../i18n';
 import { kycRequiredMessage } from '../../lib/kycLive';
+import { useNeedsKyc } from '../../lib/limits';
 import { useApp } from '../../state/app';
 import { useTrade } from '../../state/trade';
 
@@ -21,7 +22,8 @@ export default function Review() {
   const { t } = useT();
   const { state } = useLocation() as { state: { confirm?: boolean } | null };
   const { draft, requoteDraft, clearDraft } = useTrade();
-  const { needsKyc, addOrder } = useApp();
+  const { addOrder } = useApp();
+  const needsKyc = useNeedsKyc();
   const online = useOnline();
   const auth = useAuth();
   const now = useNow(!!draft, 500);

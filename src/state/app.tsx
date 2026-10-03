@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { fetchKycStatus, KYC_THRESHOLD_FCFA, type KycInfo } from '../lib/kycLive';
+import { fetchKycStatus, type KycInfo } from '../lib/kycLive';
+import { fetchServerLimits, type ServerLimits } from '../lib/limitsLive';
 import { loadState, saveState } from '../lib/persist';
 import type { Order } from '../lib/orders';
 
@@ -15,8 +16,8 @@ interface AppState {
   /** live mode: the server's view of the identity check (null while loading or in demo mode) */
   kycInfo: KycInfo | null;
   refreshKyc: () => Promise<KycInfo | null>;
-  /** does an order worth this many FCFA need an identity check the user hasn't completed? */
-  needsKyc: (fcfa: number) => boolean;
+  /** live mode: the server's limits and usage (null in demo mode or until loaded) */
+  serverLimits: ServerLimits | null;
   /** coins the user has provided to each pool, by pool id, in that coin's units (missing / 0 = not joined). */
   positions: Record<string, number>;
   setPosition: (pool: string, amount: number) => void;
@@ -51,12 +52,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { void refreshKyc(); }, [refreshKyc]);
   // live: only the server can say a user is verified (the saved flag is ignored)
   const kyc: 'none' | 'verified' = live ? (kycInfo?.approved ? 'verified' : 'none') : localKyc;
-  const threshold = kycInfo?.thresholdFcfa ?? KYC_THRESHOLD_FCFA;
-  const needsKyc = (fcfa: number) => kyc !== 'verified' && fcfa > threshold;
   // (an older build stored one FCFA `position`; it is dropped: pools are crypto-only now)
   const [positions, setPositions] = useState<Record<string, number>>(saved.positions ?? {});
   const [poolEvents, setPoolEvents] = useState<PoolEvent[]>(saved.poolEvents ?? []);
   const [orders, setOrders] = useState<Order[]>(saved.orders ?? []);
+  // live: the server's limits and usage (sells, buys and swaps, every device); refreshed when an order is added or changes state, or the check result changes
+  const [serverLimits, setServerLimits] = useState<ServerLimits | null>(null);
+  const ordersKey = orders.map((o) => `${o.id}:${o.submitted ? 1 : 0}:${o.synced ? (o.server?.status ?? o.buy?.status ?? o.swap?.status ?? '') : ''}`).join('|');
+  useEffect(() => {
+    if (!live) return;
+    let cancelled = false;
+    fetchServerLimits().then((l) => { if (!cancelled) setServerLimits(l); }).catch(() => { /* keeps the last numbers, or the local fallback */ });
+    return () => { cancelled = true; };
+  }, [live, ordersKey, kyc]);
 
   // everything the user would expect to survive a reload
   useEffect(() => { saveState('app', { kyc: localKyc, positions, poolEvents, orders } satisfies Saved); }, [localKyc, positions, poolEvents, orders]);
@@ -74,7 +82,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const removeOrder = (id: string) => setOrders((l) => l.filter((o) => o.id !== id));
 
   return (
-    <Ctx.Provider value={{ kyc, setVerified: () => setKyc('verified'), kycInfo, refreshKyc, needsKyc, positions, setPosition, poolEvents, addPoolEvent, orders, addOrder, updateOrder, removeOrder }}>
+    <Ctx.Provider value={{ kyc, setVerified: () => setKyc('verified'), kycInfo, refreshKyc, serverLimits, positions, setPosition, poolEvents, addPoolEvent, orders, addOrder, updateOrder, removeOrder }}>
       {children}
     </Ctx.Provider>
   );

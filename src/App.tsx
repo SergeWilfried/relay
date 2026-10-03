@@ -28,6 +28,7 @@ import PoolEarnings from './routes/pool/PoolEarnings';
 import PoolHistory from './routes/pool/PoolHistory';
 import Activity from './routes/Activity';
 import Account from './routes/Account';
+import KycTab from './routes/KycTab';
 
 export default function App() {
   return (
@@ -39,6 +40,8 @@ export default function App() {
             {/* internal back office: its own login (the admin key), not linked from the app */}
             <Route path="admin" element={<Suspense fallback={null}><Admin /></Suspense>} />
             <Route element={<RequireAuth />}>
+            {/* the identity check opens here in its own tab, outside the app shell */}
+            <Route path="kyc/verify" element={<KycTab />} />
             <Route element={<AppShell />}>
               <Route index element={<Navigate to="/trade/swap" replace />} />
               <Route path="trade" element={<TradeLayout />}>

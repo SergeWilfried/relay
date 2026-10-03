@@ -11,6 +11,9 @@
  *  - Everything is logged: see `logDecision` (rule id, version, mode, applied, inputs, final action, user message).
  * The decision is made HERE from server-priced amounts and server-side history, never from anything the client claims.
  */
+import { KYC_THRESHOLD_FCFA, LIMITS, MIN_FCFA, tierLimits } from './limits.ts';
+export { KYC_THRESHOLD_FCFA, MIN_FCFA, tierLimits };
+
 export type Mode = 'shadow' | 'enforce';
 export type RuleAction =
 	| { type: 'deny'; status: number }
@@ -27,14 +30,10 @@ export interface Rule {
 	user_message: string;
 }
 
-/** FCFA. Flat for every user until KYC tiers reach the server (the matrix tiers are a config change then: see tierLimits). */
-export const BASE_LIMITS = { perTx: 2_000_000, daily: 2_000_000, monthly: 10_000_000 } as const;
-export const MIN_FCFA = 1_000;
+/** The verified tier's limits (the ceiling). Per-user limits come from tierLimits(): see worker/limits.ts, the single source of truth. */
+export const BASE_LIMITS = LIMITS.verified;
 /** ISO 3166-1 alpha-2, by request IP. Deny-only (an IP can be spoofed, so a country never grants anything). Have compliance confirm this list. */
 export const BLOCKED_COUNTRIES = ['KP', 'IR', 'SY', 'CU'];
-/** Orders above this need an approved identity check (rule K-01). Compared against the server-priced FCFA amount. */
-export const KYC_THRESHOLD_FCFA = 200_000;
-export const tierLimits = (_tier: number) => BASE_LIMITS;
 
 export const RULES: Rule[] = [
 	{ id: 'P-07', version: 1, mode: 'enforce', phase: 2, description: 'Frozen account: all fiat-out denied pending a compliance decision',
@@ -43,7 +42,7 @@ export const RULES: Rule[] = [
 		when: { user_status: 'restricted' }, action: { type: 'hold' }, user_message: 'Your payout is under review. We will update you shortly.' },
 	{ id: 'R-01', version: 1, mode: 'enforce', phase: 3, description: 'Request from a sanctioned country',
 		when: { country_blocked: true }, action: { type: 'deny', status: 403 }, user_message: 'Service is not available in your country' },
-	{ id: 'K-01', version: 1, mode: 'enforce', phase: 3, description: 'Order above the KYC threshold without an approved identity check',
+	{ id: 'K-01', version: 1, mode: 'enforce', phase: 3, description: 'Order, or the day\'s total, above the KYC threshold without an approved identity check',
 		when: { kyc_required: true, kyc_approved: false }, action: { type: 'deny', status: 403 }, user_message: 'Verify your identity to continue.' },
 	{ id: 'R-08', version: 1, mode: 'enforce', phase: 3, description: 'Payout number is on the recipient denylist',
 		when: { payout_number_denied: true }, action: { type: 'deny', status: 403 }, user_message: 'This payout number cannot be used. Please contact support.' },
@@ -122,7 +121,7 @@ export function evaluate(base: BaseFacts, opts: { rules?: Rule[]; modes?: Record
 	};
 
 	const near = base.amount_fcfa >= 0.9 * BASE_LIMITS.perTx && base.amount_fcfa <= BASE_LIMITS.perTx ? 1 : 0;
-	const facts0: Facts = { ...base, country_blocked: !!base.country && BLOCKED_COUNTRIES.includes(base.country), kyc_required: base.amount_fcfa > KYC_THRESHOLD_FCFA, near_limit_requests_7d: base.prior_near_limit_7d + near };
+	const facts0: Facts = { ...base, country_blocked: !!base.country && BLOCKED_COUNTRIES.includes(base.country), kyc_required: base.amount_fcfa > KYC_THRESHOLD_FCFA || base.day_fcfa + base.amount_fcfa > KYC_THRESHOLD_FCFA, near_limit_requests_7d: base.prior_near_limit_7d + near };
 
 	// D-03 style rules first: "tier limits adjusted by D-03" (phase 4 of the matrix order)
 	let factor = 1;
@@ -185,6 +184,21 @@ export const COUNTED = `o.user_id = ?1 AND o.amount_fcfa IS NOT NULL AND o.statu
  */
 export const BUY_COUNTED = `b.user_id = ?1 AND b.status NOT IN ('failed', 'expired', 'cancelled') AND NOT (b.status = 'created' AND b.expires_at < ?2)`;
 
+/** Swaps that count against a user's limits (same ?1 user as COUNTED): not failed or rejected, since that value never moved. */
+export const SWAP_COUNTED = `s.user_id = ?1 AND s.status NOT IN ('failed', 'rejected')`;
+
+/** Total FCFA a user has moved since `since` (a bind placeholder such as '?3'): sells + buys + swaps. One definition for the read and the guards. */
+export const usageSince = (since: string) =>
+	`(SELECT COALESCE(SUM(o.amount_fcfa), 0) FROM orders o WHERE ${COUNTED} AND o.created_at >= ${since})
+	 + (SELECT COALESCE(SUM(b.fcfa), 0) FROM buy_orders b WHERE ${BUY_COUNTED} AND b.created_at >= ${since})
+	 + (SELECT COALESCE(SUM(s.fcfa_value), 0) FROM swap_orders s WHERE ${SWAP_COUNTED} AND s.created_at >= ${since})`;
+
+/**
+ * WHERE-clause for the atomic inserts of sells, buys and swaps: the new amount (?5) still fits the daily (?6) and monthly (?7) limits.
+ * Binds: ?1 user, ?2 now, ?3 start of day, ?4 start of month.
+ */
+export const LIMIT_GUARD = `${usageSince('?3')} + ?5 <= ?6 AND ${usageSince('?4')} + ?5 <= ?7`;
+
 export interface Profile { firstSeenAt: number; lastCountry: string | null; status: string; clefFlag: boolean; kycApproved: boolean }
 
 /** Creates the profile on first sight (account age starts here) and returns it. */
@@ -232,10 +246,15 @@ export async function loadFacts(env: Env, userId: string, input: { amountFcfa: n
 		        COALESCE(SUM(CASE WHEN b.status IN ('created', 'collecting') THEN 1 END), 0) AS open
 		 FROM buy_orders b WHERE ${BUY_COUNTED} AND b.created_at >= ?4`,
 	).bind(userId, now, w.day, w.month).first<{ day: number; month: number; open: number }>();
+	// swaps count too: the limits are about value moved, whichever screen moved it
+	const swaps = await env.DB.prepare(
+		`SELECT COALESCE(SUM(CASE WHEN s.created_at >= ?3 THEN s.fcfa_value END), 0) AS day, COALESCE(SUM(s.fcfa_value), 0) AS month
+		 FROM swap_orders s WHERE ${SWAP_COUNTED} AND s.created_at >= ?4`,
+	).bind(userId, now, w.day, w.month).first<{ day: number; month: number }>();
 	return {
 		amount_fcfa: input.amountFcfa, country: input.country, user_status: profile.status,
 		account_age_days: Math.floor((now - profile.firstSeenAt) / DAY_MS), tier: profile.kycApproved ? 1 : 0, kyc_approved: profile.kycApproved,
-		day_fcfa: (usage?.day ?? 0) + (buys?.day ?? 0), month_fcfa: (usage?.month ?? 0) + (buys?.month ?? 0), open_orders: (usage?.open ?? 0) + (buys?.open ?? 0), orders_last_hour: rate?.n ?? 0,
+		day_fcfa: (usage?.day ?? 0) + (buys?.day ?? 0) + (swaps?.day ?? 0), month_fcfa: (usage?.month ?? 0) + (buys?.month ?? 0) + (swaps?.month ?? 0), open_orders: (usage?.open ?? 0) + (buys?.open ?? 0), orders_last_hour: rate?.n ?? 0,
 		country_changed: !!input.country && !!profile.lastCountry && input.country !== profile.lastCountry,
 		// a first-ever number is the baseline, not a change
 		payout_number_changed: (phones?.total ?? 0) > 0 && (phones?.same ?? 0) === 0,
@@ -244,6 +263,24 @@ export async function loadFacts(env: Env, userId: string, input: { amountFcfa: n
 		// inline (not worker/lists.ts) so this file stays free of imports and testable in plain Node
 		payout_number_denied: !!(await env.DB.prepare(`SELECT 1 AS hit FROM recipient_lists WHERE list = 'deny' AND kind = ? AND value = ?`).bind(input.kind ?? 'phone', input.kind === 'alias' ? input.phone.toLowerCase() : input.phone).first()),
 	};
+}
+
+/** What the customer sees on the Account page and in the trade form: their effective limits and what they have used (from the server's records). */
+export interface LimitsView {
+	tier: number; verified: boolean;
+	limits: { perTx: number; daily: number; monthly: number };
+	/** the verified tier's limits: what verification unlocks */
+	ceiling: { perTx: number; daily: number; monthly: number };
+	used: { day: number; month: number };
+	kycThresholdFcfa: number; minFcfa: number;
+}
+
+export async function loadLimitsView(env: Env, userId: string, now: number): Promise<LimitsView> {
+	const profile = await ensureProfile(env, userId, null, now);
+	const w = windowStarts(now);
+	const r = await env.DB.prepare(`SELECT ${usageSince('?3')} AS day, ${usageSince('?4')} AS month`).bind(userId, now, w.day, w.month).first<{ day: number; month: number }>();
+	const tier = profile.kycApproved ? 1 : 0;
+	return { tier, verified: profile.kycApproved, limits: { ...tierLimits(tier) }, ceiling: { ...LIMITS.verified }, used: { day: r?.day ?? 0, month: r?.month ?? 0 }, kycThresholdFcfa: KYC_THRESHOLD_FCFA, minFcfa: MIN_FCFA };
 }
 
 export async function logDecision(env: Env, d: { userId: string; orderId: string; outcome: Outcome }) {

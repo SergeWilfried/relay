@@ -23,7 +23,7 @@ function Meter({ label, u, resets }: { label: string; u: Usage; resets: string }
 /** Transaction limits for the Account card: per-transaction cap plus daily and monthly usage. */
 export function LimitsSection() {
   const { t, locale } = useT();
-  const { kyc, kycInfo } = useApp();
+  const { kyc } = useApp();
   const l = useLimits();
   const date = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' });
   return (
@@ -37,7 +37,7 @@ export function LimitsSection() {
       </div>
       <Meter label={t('Today')} u={l.daily} resets={t('resets at midnight')} />
       <Meter label={t('This month')} u={l.monthly} resets={t('resets on {date}', { date: date.format(l.monthResetsAt) })} />
-      {kyc !== 'verified' && <div className="note" style={{ textAlign: 'left', marginTop: 8 }}>{t('Orders above {amount} FCFA need identity verification.', { amount: fmtInt(kycInfo?.thresholdFcfa ?? 200_000) })}</div>}
+      {kyc !== 'verified' && <div className="note" style={{ textAlign: 'left', marginTop: 8 }}>{t('Without identity verification you can move up to {amount} FCFA per day. Verify your identity to raise your limits to {max} FCFA per day.', { amount: fmtInt(l.daily.limit), max: fmtInt(l.ceiling.daily) })}</div>}
     </section>
   );
 }

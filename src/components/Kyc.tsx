@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useT } from '../i18n';
 import { fmtInt } from '../lib/format';
-import { fetchKycToken, KYC_THRESHOLD_FCFA, syncKyc } from '../lib/kycLive';
+import { KYC_THRESHOLD_FCFA, syncKyc } from '../lib/kycLive';
 import { useApp } from '../state/app';
 import { BackHeader } from './BackHeader';
 
@@ -17,7 +17,7 @@ export function KycIntro({ onBack, onStart, title, compact }: { onBack: () => vo
       <div className="infobox">
         {compact
           ? t('A one-time check is required before your first deposit: government ID + selfie, about 2 minutes, handled by our verification partner.')
-          : t('A one-time identity check is required for orders above {amount} FCFA. It is handled by our verification partner — Relay never sees or stores your documents.', { amount: fmtInt(threshold) })}
+          : t('A one-time identity check is required to move more than {amount} FCFA per day. It is handled by our verification partner — Relay never sees or stores your documents.', { amount: fmtInt(threshold) })}
       </div>
       {!compact && (
         <div className="steps" style={{ margin: '18px 6px' }}>
@@ -32,80 +32,45 @@ export function KycIntro({ onBack, onStart, title, compact }: { onBack: () => vo
   );
 }
 
-const SDK_URL = 'https://static.sumsub.com/idensic/static/sns-websdk-builder.js';
-
-interface SnsBuilder { withConf(c: object): SnsBuilder; withOptions(o: object): SnsBuilder; on(e: string, cb: (p: unknown) => void): SnsBuilder; onMessage(cb: (t: string, p: unknown) => void): SnsBuilder; build(): { launch(sel: string): void; destroy?: () => void } }
-declare global { interface Window { snsWebSdk?: { init(token: string, refresh: () => Promise<string>): SnsBuilder } } }
-
-let sdkLoad: Promise<void> | null = null;
-const loadSdk = () => (sdkLoad ??= new Promise<void>((resolve, reject) => {
-  if (window.snsWebSdk) return resolve();
-  const el = document.createElement('script');
-  el.src = SDK_URL; el.async = true;
-  el.onload = () => resolve();
-  el.onerror = () => { sdkLoad = null; reject(new Error('sdk')); };
-  document.head.appendChild(el);
-}));
+export const VERIFY_PATH = '/kyc/verify';
 
 /**
- * Live mode: Sumsub's web SDK (ID document + liveness) inside the page. The SDK only collects the documents; the verdict comes
- * from the server (Sumsub webhook), so we poll the server and call `onApproved` only when it says approved.
+ * Live mode: the identity check (ID document + liveness) runs on Sumsub's own page in a separate browser tab, so the camera
+ * and the verification never depend on this page. Here we wait for the verdict: it comes from the server (Sumsub webhook),
+ * and `onApproved` is called only when the server says approved.
  * Demo mode: a simulated approval, so the flow can be tried without a verification partner.
  */
 export function KycSdk({ onApproved }: { onApproved: () => void }) {
-  const { t, lang } = useT();
+  const { t } = useT();
   const auth = useAuth();
   const { refreshKyc, kycInfo } = useApp();
-  const [phase, setPhase] = useState<'loading' | 'sdk' | 'waiting' | 'error'>('loading');
+  const [phase, setPhase] = useState<'ready' | 'waiting'>('ready');
   const [error, setError] = useState<string | null>(null);
   const done = useRef(false);
-
   const finish = useCallback(() => { if (!done.current) { done.current = true; onApproved(); } }, [onApproved]);
 
-  // after the SDK reports "submitted", the server learns the verdict from Sumsub: poll until it is final
-  const waitForVerdict = useCallback(async () => {
-    setPhase('waiting');
-    for (let i = 0; i < 40 && !done.current; i++) {
-      const k = i % 4 === 3 ? await syncKyc().catch(() => null) : await refreshKyc();
-      if (k) await refreshKyc();
-      if (k?.approved) return finish();
-      if (k && (k.status === 'retry' || k.status === 'rejected')) { setError(t(k.message ?? 'We could not complete your check. Please try again.')); return setPhase(k.status === 'retry' ? 'sdk' : 'error'); }
-      await new Promise((r) => setTimeout(r, 3000));
-    }
-  }, [finish, refreshKyc, t]);
-
+  // the verdict arrives on the server (Sumsub webhook): keep asking while the other tab is open. A manual sync every 4th round
+  // covers a missed webhook.
   useEffect(() => {
-    if (auth.mode !== 'privy') return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const first = await fetchKycToken();
-        await loadSdk();
-        if (cancelled || !window.snsWebSdk) return;
-        window.snsWebSdk.init(first.token, async () => (await fetchKycToken()).token)
-          .withConf({ lang, theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' })
-          .withOptions({ addViewportTag: false, adaptIframeHeight: true })
-          .on('idCheck.onApplicantSubmitted', () => { void waitForVerdict(); })
-          .on('idCheck.onApplicantStatusChanged', (p) => {
-            const r = (p as { reviewStatus?: string } | null)?.reviewStatus;
-            if (r === 'pending' || r === 'completed') void waitForVerdict();
-          })
-          .on('idCheck.onError', () => { /* the SDK shows its own message and lets the user retry */ })
-          .build().launch('#kyc-sdk-root');
-        setPhase('sdk');
-      } catch (e) {
-        if (!cancelled) { setError(e instanceof Error && e.message !== 'sdk' ? e.message : t('Identity verification is unavailable right now. Please try again later.')); setPhase('error'); }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [auth.mode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // the verdict can also arrive while the SDK is open (reviewed by an analyst, or finished on another device): keep asking the server
-  useEffect(() => {
-    if (auth.mode !== 'privy') return;
-    const id = setInterval(() => { void refreshKyc().then((k) => { if (k?.approved) finish(); }); }, 5000);
+    if (auth.mode !== 'privy' || phase !== 'waiting') return;
+    let n = 0;
+    const id = setInterval(() => {
+      void (n++ % 4 === 3 ? syncKyc().then(() => refreshKyc()).catch(() => null) : refreshKyc()).then((k) => {
+        if (k?.approved) finish();
+        else if (k?.status === 'retry') { setError(t(k.message ?? 'We could not complete your check. Please try again.')); setPhase('ready'); }
+        else if (k?.status === 'rejected') { setError(t(k.message ?? 'We could not verify your identity. Please contact support.')); setPhase('ready'); }
+      });
+    }, 3000);
     return () => clearInterval(id);
-  }, [auth.mode, refreshKyc, finish]);
+  }, [auth.mode, phase, refreshKyc, finish, t]);
+
+  const open = () => {
+    setError(null);
+    // the check runs full-page in its own tab (same app, same sign-in); this page keeps waiting for the verdict
+    const tab = window.open(VERIFY_PATH, '_blank');
+    if (!tab) { setError(t('Your browser blocked the new tab. Allow pop-ups for this site and try again.')); return; }
+    setPhase('waiting');
+  };
 
   if (auth.mode !== 'privy') {
     return (
@@ -123,11 +88,17 @@ export function KycSdk({ onApproved }: { onApproved: () => void }) {
   return (
     <>
       <div className="row-between"><h1 className="bh-title" style={{ margin: 0 }}>{t('Identity check')}</h1><span className="tag">{t('Verification partner')}</span></div>
-      {phase === 'loading' && <div className="note" role="status">{t('Loading the verification…')}</div>}
-      {phase === 'waiting' && <div className="notice" role="status"><b>{t('Checking your documents…')}</b> {t('This usually takes under a minute. You can stay on this page.')}</div>}
+      <div className="infobox">{t('The check opens in a new tab: your ID document, then a quick selfie. Keep this page open, it continues by itself when you are verified.')}</div>
       {error && <div className="notice warn" role="alert">{error}</div>}
-      {kycInfo?.status === 'pending' && phase === 'sdk' && <div className="note">{t('Your check is being reviewed.')}</div>}
-      <div id="kyc-sdk-root" style={phase === 'error' || phase === 'waiting' ? { display: 'none' } : undefined} />
+      {phase === 'waiting' && (
+        <div className="notice" role="status">
+          <b>{kycInfo?.status === 'pending' ? t('Checking your documents…') : t('Waiting for your verification…')}</b> {t('This usually takes under a minute once you finish.')}
+          <div><a className="notice-act" href={VERIFY_PATH} target="_blank" rel="noreferrer">{t('Reopen the verification tab')}</a></div>
+        </div>
+      )}
+      <button className="btn acc" style={{ marginTop: 14 }} onClick={open}>
+        {phase === 'waiting' ? t('Open it again') : t('Open verification in a new tab')}
+      </button>
     </>
   );
 }
