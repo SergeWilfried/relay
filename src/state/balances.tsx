@@ -23,7 +23,6 @@ const REFRESH_MS = 30_000;
 
 export function BalancesProvider({ children }: { children: ReactNode }) {
   const { mode, wallets } = useAuth();
-  const TEST = typeof localStorage !== 'undefined' && !!localStorage.getItem('relay-test-token'); // TEMPORARY TEST PATCH
   const [values, setValues] = useState<Record<string, number>>({});
   const [status, setStatus] = useState<Status>('loading');
   const eth = wallets.Ethereum;
@@ -31,7 +30,7 @@ export function BalancesProvider({ children }: { children: ReactNode }) {
   const seq = useRef(0);
 
   const load = useCallback(async () => {
-    if (mode === 'demo' || TEST) return;
+    if (mode === 'demo') return;
     const id = ++seq.current;
     const next: Record<string, number> = {};
     let failed = false;
@@ -46,7 +45,7 @@ export function BalancesProvider({ children }: { children: ReactNode }) {
   }, [mode, eth, sol]);
 
   useEffect(() => {
-    if (mode === 'demo' || TEST) return;
+    if (mode === 'demo') return;
     setStatus('loading');
     void load();
     const t = setInterval(() => void load(), REFRESH_MS);
@@ -56,7 +55,7 @@ export function BalancesProvider({ children }: { children: ReactNode }) {
   }, [mode, load]);
 
   const value = useMemo<BalancesState>(() => ({
-    get: (sym) => (mode === 'demo' || TEST ? ASSETS.find((a) => a.sym === sym)?.balance ?? null : values[sym] ?? null),
+    get: (sym) => (mode === 'demo' ? ASSETS.find((a) => a.sym === sym)?.balance ?? null : values[sym] ?? null),
     status: mode === 'demo' ? 'ready' : status,
     refresh: () => { void load(); },
   }), [mode, values, status, load]);

@@ -69,7 +69,7 @@ export default function Status() {
         {done ? <div className="check">✓</div> : failed ? <div className="check bad">✕</div> : <Spinner large />}
         <div className="status-t">{done ? order.doneTitle : failed ? (live ? t('Payout needs attention') : t("This didn't go through")) : reviewing ? t('Payout under review') : sendingBuy ? t('Sending your {sym}', { sym: order.from.sym }) : liveSwap && !done && !failed ? t('Swapping…') : order.title}</div>
         <div className="status-s">
-          {done ? (liveSwap && swap?.amountOut ? t('{amount} in your wallet', { amount: `${fmtRate(Number(swap.amountOut))} ${order.to.sym}` }) : order.doneSub) : failed ? t("Step {n} of 3 didn't complete · {amount}", { n: step + 1, amount: order.quote.summaryFrom }) : reviewing ? t('{amount} to {provider}', { amount: order.quote.summaryTo, provider: order.provider?.name ?? '' }) : sendingBuy ? t('{amount} to your wallet', { amount: order.quote.summaryTo }) : order.sub}
+          {done ? (liveSwap && swap?.amountOut ? t('{amount} in your wallet', { amount: `${fmtRate(Number(swap.amountOut))} ${order.to.sym}` }) : order.doneSub) : failed ? t("Step {n} of 3 didn't complete · {amount}", { n: step + 1, amount: order.quote.summaryFrom }) : reviewing ? t('{amount} to {provider}', { amount: order.quote.summaryTo, provider: order.provider?.name ?? '' }) : sendingBuy ? t('{amount} to your wallet', { amount: order.quote.summaryTo }) : liveSwap ? `${order.from.sym} → ${order.to.sym}` : order.sub}
         </div>
       </div>
 
