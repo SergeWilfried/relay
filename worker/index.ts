@@ -372,7 +372,10 @@ async function ordersApi(request: Request, env: Env, ctx: ExecutionContext, path
 		}
 	}
 
-	if (pathname === '/api/orders' && request.method === 'GET') return json({ orders: await listOrders(env, userId), buys: getDepositProvider(env) ? await listBuys(env, userId) : [], swaps: await listSwaps(env, userId) });
+	if (pathname === '/api/orders' && request.method === 'GET') {
+		const [orders, buys, swaps] = await Promise.all([listOrders(env, userId), getDepositProvider(env) ? listBuys(env, userId) : Promise.resolve([]), listSwaps(env, userId)]);
+		return json({ orders, buys, swaps });
+	}
 
 	const pay = /^\/api\/orders\/([a-z0-9]{6,32})\/pay$/.exec(pathname);
 	if (pay && request.method === 'POST') {

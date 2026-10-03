@@ -95,8 +95,8 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 	const refusal = await getProvider(env).supports?.(operator, phone, amountFcfa);
 	if (typeof refusal === 'string') throw new BadRequest(refusal);
 	const profile = await ensureProfile(env, userId, country, now);
-	const facts = await loadFacts(env, userId, { amountFcfa, phone, country, kind: byAlias ? 'alias' : 'phone' }, profile, now);
-	const outcome = evaluate(facts, { modes: await loadModes(env) });
+	const [facts, modes] = await Promise.all([loadFacts(env, userId, { amountFcfa, phone, country, kind: byAlias ? 'alias' : 'phone' }, profile, now), loadModes(env)]);
+	const outcome = evaluate(facts, { modes });
 	if (outcome.action === 'deny') return deny(env, userId, id, outcome);
 
 	const wallet = await createDepositWallet(env, asset, id);

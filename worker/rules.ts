@@ -203,8 +203,13 @@ export interface Profile { firstSeenAt: number; lastCountry: string | null; stat
 
 /** Creates the profile on first sight (account age starts here) and returns it. */
 export async function ensureProfile(env: Env, userId: string, country: string | null, now: number): Promise<Profile> {
-	await env.DB.prepare(`INSERT OR IGNORE INTO user_profile (user_id, first_seen_at, last_country, updated_at) VALUES (?, ?, ?, ?)`).bind(userId, now, country, now).run();
-	const r = await env.DB.prepare(`SELECT p.first_seen_at, p.last_country, p.status, p.clef_flag, (SELECT 1 FROM kyc k WHERE k.user_id = p.user_id AND k.status = 'approved') AS kyc_ok FROM user_profile p WHERE p.user_id = ?`).bind(userId).first<{ first_seen_at: number; last_country: string | null; status: string; clef_flag: string | null; kyc_ok: number | null }>();
+	const read = () => env.DB.prepare(`SELECT p.first_seen_at, p.last_country, p.status, p.clef_flag, (SELECT 1 FROM kyc k WHERE k.user_id = p.user_id AND k.status = 'approved') AS kyc_ok FROM user_profile p WHERE p.user_id = ?`).bind(userId).first<{ first_seen_at: number; last_country: string | null; status: string; clef_flag: string | null; kyc_ok: number | null }>();
+	// the profile exists for every returning user, and this runs on every authenticated request (including 6-second polls): read first, write only the first time
+	let r = await read();
+	if (!r) {
+		await env.DB.prepare(`INSERT OR IGNORE INTO user_profile (user_id, first_seen_at, last_country, updated_at) VALUES (?, ?, ?, ?)`).bind(userId, now, country, now).run();
+		r = await read();
+	}
 	return { firstSeenAt: r!.first_seen_at, lastCountry: r!.last_country, status: r!.status, clefFlag: !!r!.clef_flag, kycApproved: !!r!.kyc_ok };
 }
 
@@ -228,29 +233,34 @@ export async function setUserStatus(env: Env, userId: string, status: 'normal' |
 
 export async function loadFacts(env: Env, userId: string, input: { amountFcfa: number; phone: string; country: string | null; /** a PI-SPI alias is checked against the alias denylist, case-insensitively */ kind?: 'phone' | 'alias' }, profile: Profile, now: number): Promise<BaseFacts> {
 	const w = windowStarts(now);
-	const usage = await env.DB.prepare(
-		`SELECT
-		   COALESCE(SUM(CASE WHEN o.created_at >= ?3 THEN o.amount_fcfa END), 0) AS day,
-		   COALESCE(SUM(CASE WHEN o.created_at >= ?4 THEN o.amount_fcfa END), 0) AS month,
-		   COALESCE(SUM(CASE WHEN o.status = 'awaiting_deposit' THEN 1 END), 0) AS open
-		 FROM orders o WHERE ${COUNTED} AND o.created_at >= ?4`,
-	).bind(userId, now, w.day, w.month).first<{ day: number; month: number; open: number }>();
-	// velocity counts every order created, whatever happened to it (a burst of cancelled orders is still a burst)
-	const rate = await env.DB.prepare(`SELECT COUNT(*) AS n FROM orders WHERE user_id = ? AND created_at >= ?`).bind(userId, now - HOUR_MS).first<{ n: number }>();
-	const phones = await env.DB.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(phone = ?), 0) AS same FROM orders WHERE user_id = ? AND phone IS NOT NULL`).bind(input.phone, userId).first<{ total: number; same: number }>();
-	const near = await env.DB.prepare(`SELECT COUNT(*) AS n FROM decisions WHERE user_id = ? AND created_at >= ? AND amount_fcfa >= ? AND amount_fcfa <= ?`)
-		.bind(userId, now - 7 * DAY_MS, 0.9 * BASE_LIMITS.perTx, BASE_LIMITS.perTx).first<{ n: number }>();
-	// buys count toward the same daily / monthly limits and the open-order cap
-	const buys = await env.DB.prepare(
-		`SELECT COALESCE(SUM(CASE WHEN b.created_at >= ?3 THEN b.fcfa END), 0) AS day, COALESCE(SUM(CASE WHEN b.created_at >= ?4 THEN b.fcfa END), 0) AS month,
-		        COALESCE(SUM(CASE WHEN b.status IN ('created', 'collecting') THEN 1 END), 0) AS open
-		 FROM buy_orders b WHERE ${BUY_COUNTED} AND b.created_at >= ?4`,
-	).bind(userId, now, w.day, w.month).first<{ day: number; month: number; open: number }>();
-	// swaps count too: the limits are about value moved, whichever screen moved it
-	const swaps = await env.DB.prepare(
-		`SELECT COALESCE(SUM(CASE WHEN s.created_at >= ?3 THEN s.fcfa_value END), 0) AS day, COALESCE(SUM(s.fcfa_value), 0) AS month
-		 FROM swap_orders s WHERE ${SWAP_COUNTED} AND s.created_at >= ?4`,
-	).bind(userId, now, w.day, w.month).first<{ day: number; month: number }>();
+	// seven independent reads: one round trip's worth of waiting instead of seven
+	const [usage, rate, phones, near, buys, swaps, denied] = await Promise.all([
+		env.DB.prepare(
+			`SELECT
+			   COALESCE(SUM(CASE WHEN o.created_at >= ?3 THEN o.amount_fcfa END), 0) AS day,
+			   COALESCE(SUM(CASE WHEN o.created_at >= ?4 THEN o.amount_fcfa END), 0) AS month,
+			   COALESCE(SUM(CASE WHEN o.status = 'awaiting_deposit' THEN 1 END), 0) AS open
+			 FROM orders o WHERE ${COUNTED} AND o.created_at >= ?4`,
+		).bind(userId, now, w.day, w.month).first<{ day: number; month: number; open: number }>(),
+		// velocity counts every order created, whatever happened to it (a burst of cancelled orders is still a burst)
+		env.DB.prepare(`SELECT COUNT(*) AS n FROM orders WHERE user_id = ? AND created_at >= ?`).bind(userId, now - HOUR_MS).first<{ n: number }>(),
+		env.DB.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(phone = ?), 0) AS same FROM orders WHERE user_id = ? AND phone IS NOT NULL`).bind(input.phone, userId).first<{ total: number; same: number }>(),
+		env.DB.prepare(`SELECT COUNT(*) AS n FROM decisions WHERE user_id = ? AND created_at >= ? AND amount_fcfa >= ? AND amount_fcfa <= ?`)
+			.bind(userId, now - 7 * DAY_MS, 0.9 * BASE_LIMITS.perTx, BASE_LIMITS.perTx).first<{ n: number }>(),
+		// buys count toward the same daily / monthly limits and the open-order cap
+		env.DB.prepare(
+			`SELECT COALESCE(SUM(CASE WHEN b.created_at >= ?3 THEN b.fcfa END), 0) AS day, COALESCE(SUM(CASE WHEN b.created_at >= ?4 THEN b.fcfa END), 0) AS month,
+			        COALESCE(SUM(CASE WHEN b.status IN ('created', 'collecting') THEN 1 END), 0) AS open
+			 FROM buy_orders b WHERE ${BUY_COUNTED} AND b.created_at >= ?4`,
+		).bind(userId, now, w.day, w.month).first<{ day: number; month: number; open: number }>(),
+		// swaps count too: the limits are about value moved, whichever screen moved it
+		env.DB.prepare(
+			`SELECT COALESCE(SUM(CASE WHEN s.created_at >= ?3 THEN s.fcfa_value END), 0) AS day, COALESCE(SUM(s.fcfa_value), 0) AS month
+			 FROM swap_orders s WHERE ${SWAP_COUNTED} AND s.created_at >= ?4`,
+		).bind(userId, now, w.day, w.month).first<{ day: number; month: number }>(),
+		// inline (not worker/lists.ts) so this file stays free of imports and testable in plain Node
+		env.DB.prepare(`SELECT 1 AS hit FROM recipient_lists WHERE list = 'deny' AND kind = ? AND value = ?`).bind(input.kind ?? 'phone', input.kind === 'alias' ? input.phone.toLowerCase() : input.phone).first(),
+	]);
 	return {
 		amount_fcfa: input.amountFcfa, country: input.country, user_status: profile.status,
 		account_age_days: Math.floor((now - profile.firstSeenAt) / DAY_MS), tier: profile.kycApproved ? 1 : 0, kyc_approved: profile.kycApproved,
@@ -260,8 +270,7 @@ export async function loadFacts(env: Env, userId: string, input: { amountFcfa: n
 		payout_number_changed: (phones?.total ?? 0) > 0 && (phones?.same ?? 0) === 0,
 		prior_near_limit_7d: near?.n ?? 0,
 		clef_flag_active: profile.clefFlag,
-		// inline (not worker/lists.ts) so this file stays free of imports and testable in plain Node
-		payout_number_denied: !!(await env.DB.prepare(`SELECT 1 AS hit FROM recipient_lists WHERE list = 'deny' AND kind = ? AND value = ?`).bind(input.kind ?? 'phone', input.kind === 'alias' ? input.phone.toLowerCase() : input.phone).first()),
+		payout_number_denied: !!denied,
 	};
 }
 

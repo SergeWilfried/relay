@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { fetchKycStatus, type KycInfo } from '../lib/kycLive';
 import { fetchServerLimits, type ServerLimits } from '../lib/limitsLive';
@@ -82,20 +82,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // everything the user would expect to survive a reload
   useEffect(() => { saveState('app', { kyc: localKyc, positions, poolEvents, orders } satisfies Saved); }, [localKyc, positions, poolEvents, orders]);
 
-  const setPosition = (pool: string, amount: number) =>
+  // Stable identities (useCallback) and a memoised value: consumers re-render only when something they read changed, and effects that depend on
+  // these functions (the order sync poll in lib/useOrderSync.ts) are not torn down and restarted by every unrelated state change.
+  const setPosition = useCallback((pool: string, amount: number) =>
     setPositions((p) => {
       const next = { ...p, [pool]: Math.max(0, amount) };
       if (next[pool] === 0) delete next[pool];
       return next;
-    });
-  const addPoolEvent = (type: PoolEvent['type'], pool: string, amount: number) =>
-    setPoolEvents((l) => [{ id: Date.now().toString(36), type, pool, amount, at: Date.now() }, ...l]);
-  const addOrder = (o: Order) => setOrders((l) => [o, ...l.filter((x) => x.id !== o.id)]);
-  const updateOrder = (id: string, patch: Partial<Order>) => setOrders((l) => l.map((o) => (o.id === id ? { ...o, ...patch } : o)));
-  const removeOrder = (id: string) => setOrders((l) => l.filter((o) => o.id !== id));
+    }), []);
+  const addPoolEvent = useCallback((type: PoolEvent['type'], pool: string, amount: number) =>
+    setPoolEvents((l) => [{ id: Date.now().toString(36), type, pool, amount, at: Date.now() }, ...l]), []);
+  const addOrder = useCallback((o: Order) => setOrders((l) => [o, ...l.filter((x) => x.id !== o.id)]), []);
+  const updateOrder = useCallback((id: string, patch: Partial<Order>) => setOrders((l) => l.map((o) => (o.id === id ? { ...o, ...patch } : o))), []);
+  const removeOrder = useCallback((id: string) => setOrders((l) => l.filter((o) => o.id !== id)), []);
+  const setVerified = useCallback(() => setKyc('verified'), []);
+
+  const value = useMemo<AppState>(
+    () => ({ kyc, setVerified, kycInfo, refreshKyc, serverLimits, positions, setPosition, poolEvents, addPoolEvent, orders, addOrder, updateOrder, removeOrder }),
+    [kyc, setVerified, kycInfo, refreshKyc, serverLimits, positions, setPosition, poolEvents, addPoolEvent, orders, addOrder, updateOrder, removeOrder],
+  );
 
   return (
-    <Ctx.Provider value={{ kyc, setVerified: () => setKyc('verified'), kycInfo, refreshKyc, serverLimits, positions, setPosition, poolEvents, addPoolEvent, orders, addOrder, updateOrder, removeOrder }}>
+    <Ctx.Provider value={value}>
       {children}
     </Ctx.Provider>
   );

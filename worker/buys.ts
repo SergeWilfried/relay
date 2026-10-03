@@ -112,8 +112,8 @@ export async function createBuyOrder(env: Env, userId: string, input: CreateBuyI
 
 	const now = Date.now();
 	const profile = await ensureProfile(env, userId, country, now);
-	const facts = await loadFacts(env, userId, { amountFcfa: fcfa, phone, country }, profile, now);
-	const outcome = evaluate(facts, { modes: await loadModes(env) });
+	const [facts, modes] = await Promise.all([loadFacts(env, userId, { amountFcfa: fcfa, phone, country }, profile, now), loadModes(env)]);
+	const outcome = evaluate(facts, { modes });
 	if (outcome.action === 'deny') {
 		await logDecision(env, { userId, orderId: id, outcome });
 		throw new RuleDenied(outcome.message, outcome.status, outcome.ruleIds);

@@ -106,7 +106,8 @@ export async function createSwap(env: Env, userId: string, input: { id: unknown;
 	const now = Date.now();
 	const value = fcfaValue(plan.from.sym, String(input.amount));
 	const profile = await ensureProfile(env, userId, country, now);
-	const outcome = evaluate(await loadFacts(env, userId, { amountFcfa: value, phone: '', country }, profile, now), { modes: await loadModes(env) });
+	const [facts, modes] = await Promise.all([loadFacts(env, userId, { amountFcfa: value, phone: '', country }, profile, now), loadModes(env)]);
+	const outcome = evaluate(facts, { modes });
 	if (outcome.action !== 'allow') {
 		await logDecision(env, { userId, orderId: id, outcome });
 		// a hold (a restricted account) means "no money moves until a person looks"; for a swap that is a refusal
