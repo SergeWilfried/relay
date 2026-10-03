@@ -9,6 +9,7 @@ import Float from './Float';
 import Refunds from './Refunds';
 import Revenue from './Revenue';
 import Sweeps from './Sweeps';
+import Kyc from './Kyc';
 import type { AdminPayout } from './api';
 
 type Tab = 'pending' | 'progress' | 'failed' | 'done' | 'all';
@@ -104,7 +105,7 @@ function ActionSheet({ action, onClose, onDone }: { action: Action; onClose: () 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => !!api.getKey());
   const [rows, setRows] = useState<AdminPayout[] | null>(null);
-  const [view, setView] = useState<'payouts' | 'deliveries' | 'float' | 'sweeps' | 'refunds' | 'revenue'>('payouts');
+  const [view, setView] = useState<'payouts' | 'deliveries' | 'float' | 'sweeps' | 'refunds' | 'revenue' | 'kyc'>('payouts');
   const [tab, setTab] = useState<Tab>('pending');
   const [action, setAction] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -152,9 +153,11 @@ export default function Admin() {
         <button role="tab" aria-selected={view === 'sweeps'} className={`admin-tab${view === 'sweeps' ? ' on' : ''}`} onClick={() => setView('sweeps')}>Sweeps</button>
         <button role="tab" aria-selected={view === 'refunds'} className={`admin-tab${view === 'refunds' ? ' on' : ''}`} onClick={() => setView('refunds')}>Refunds</button>
         <button role="tab" aria-selected={view === 'revenue'} className={`admin-tab${view === 'revenue' ? ' on' : ''}`} onClick={() => setView('revenue')}>Revenue</button>
+        <button role="tab" aria-selected={view === 'kyc'} className={`admin-tab${view === 'kyc' ? ' on' : ''}`} onClick={() => setView('kyc')}>KYC</button>
       </div>
       {view === 'deliveries' && <Deliveries onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'float' && <Float onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
+      {view === 'kyc' && <Kyc onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'sweeps' && <Sweeps onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'refunds' && <Refunds onAuthError={() => { api.setKey(''); setAuthed(false); }} />}
       {view === 'revenue' && <Revenue onAuthError={() => { api.setKey(''); setAuthed(false); }} />}

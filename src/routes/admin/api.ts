@@ -162,3 +162,11 @@ export interface FloatRow {
 }
 export interface FloatView { provider: string; floor: number; generatedAt: number; rows: FloatRow[] | null }
 export const getFloat = () => call<FloatView>('/payouts/float');
+
+export interface AdminKyc {
+  user_id: string; applicant_id: string | null; level: string;
+  status: 'none' | 'pending' | 'approved' | 'rejected' | 'retry';
+  reject_type: string | null; reject_labels: string[]; first_name: string | null; last_name: string | null; country: string | null; updated_at: number;
+}
+export const listKyc = () => call<{ kyc: AdminKyc[] }>('/kyc').then((r) => r.kyc);
+export const syncKycUser = (userId: string) => call<{ status: string }>(`/kyc/${encodeURIComponent(userId)}/sync`, 'POST');

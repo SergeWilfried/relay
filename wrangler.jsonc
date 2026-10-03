@@ -33,6 +33,8 @@
             "PAWAPAY_BASE_URL": "https://api.sandbox.pawapay.io",
             // Privy REST API base for the swap client (override only to test against a mock)
             "PRIVY_API_URL": "https://api.privy.io",
+            // Sumsub level for the identity check (ID document + liveness). Secrets: SUMSUB_TOKEN, SUMSUB_SECRET, SUMSUB_WEBHOOK_SECRET
+            "SUMSUB_LEVEL": "id-and-liveness",
             // JSON-RPC endpoint used to fetch a blockhash for Solana sweeps (empty = the public mainnet-beta endpoint, which is rate-limited: use a provider URL in production)
             "SOLANA_RPC_URL": "",
             // "true" turns Clef on (alert triage C-05 and the daily review C-04). Both start in shadow mode: see README.

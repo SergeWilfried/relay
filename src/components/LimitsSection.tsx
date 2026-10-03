@@ -23,21 +23,21 @@ function Meter({ label, u, resets }: { label: string; u: Usage; resets: string }
 /** Transaction limits for the Account card: per-transaction cap plus daily and monthly usage. */
 export function LimitsSection() {
   const { t, locale } = useT();
-  const { kyc } = useApp();
+  const { kyc, kycInfo } = useApp();
   const l = useLimits();
   const date = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' });
   return (
     <section aria-label={t('Transaction limits')}>
       <div className="row-between" style={{ marginTop: 18, marginBottom: 8 }}>
         <div className="sec-label" style={{ margin: 0 }}>{t('Transaction limits')}</div>
-        <span className={`tag-s ${kyc === 'verified' ? 'ok' : ''}`} style={{ marginLeft: 0 }}>{kyc === 'verified' ? t('Verified') : t('After verification')}</span>
+        <span className={`tag-s ${kyc === 'verified' ? 'ok' : ''}`} style={{ marginLeft: 0 }}>{kyc === 'verified' ? t('Verified') : t('Not verified')}</span>
       </div>
       <div className="field" style={{ marginTop: 0 }}>
         <div><div className="field-l">{t('Per transaction')}</div><div className="field-v num" style={{ fontFamily: 'inherit' }}>{t('{amount} FCFA max', { amount: fmtInt(l.perTx) })}</div></div>
       </div>
       <Meter label={t('Today')} u={l.daily} resets={t('resets at midnight')} />
       <Meter label={t('This month')} u={l.monthly} resets={t('resets on {date}', { date: date.format(l.monthResetsAt) })} />
-      {kyc !== 'verified' && <div className="note" style={{ textAlign: 'left', marginTop: 8 }}>{t('Verify your identity to start trading. These limits apply once you are verified.')}</div>}
+      {kyc !== 'verified' && <div className="note" style={{ textAlign: 'left', marginTop: 8 }}>{t('Orders above {amount} FCFA need identity verification.', { amount: fmtInt(kycInfo?.thresholdFcfa ?? 200_000) })}</div>}
     </section>
   );
 }

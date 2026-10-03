@@ -32,7 +32,7 @@ function WalletRow({ net, address, status, error }: { net: 'Ethereum' | 'Solana'
 }
 
 export default function Account() {
-  const { kyc } = useApp();
+  const { kyc, kycInfo } = useApp();
   const { theme, setTheme } = useTheme();
   const auth = useAuth();
   const { t } = useT();
@@ -54,7 +54,7 @@ export default function Account() {
             <div><button className="notice-act" onClick={auth.retryWallets}>{t('Try again')}</button></div>
           </div>
         )}
-        <div className="field"><div><div className="field-l">{t('Identity')}</div><div className="field-v" style={{ fontFamily: 'inherit' }}>{kyc === 'verified' ? `✓ ${t('Verified')}` : t('Not verified yet')}</div></div></div>
+        <div className="field"><div><div className="field-l">{t('Identity')}</div><div className="field-v" style={{ fontFamily: 'inherit' }}>{kyc === 'verified' ? `✓ ${t('Verified')}` : kycInfo?.status === 'pending' ? t('Under review') : kycInfo?.status === 'rejected' ? t('Could not be verified') : t('Not verified yet')}</div></div></div>
         <LimitsSection />
         <div className="sec-label">{t('Appearance')}</div>
         <div className="seg" style={{ width: 'fit-content' }} role="group" aria-label={t('Theme')}>

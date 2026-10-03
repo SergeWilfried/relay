@@ -5,7 +5,7 @@ import { evaluate, RULES, windowStarts, type BaseFacts, type Rule } from '../wor
 const base: BaseFacts = {
   amount_fcfa: 500_000, country: 'CI', user_status: 'normal', account_age_days: 90, tier: 0,
   day_fcfa: 0, month_fcfa: 0, open_orders: 0, orders_last_hour: 0,
-  country_changed: false, payout_number_changed: false, prior_near_limit_7d: 0, clef_flag_active: false, payout_number_denied: false,
+  country_changed: false, payout_number_changed: false, prior_near_limit_7d: 0, clef_flag_active: false, payout_number_denied: false, kyc_approved: true,
 };
 const run = (over: Partial<BaseFacts> = {}, opts: Parameters<typeof evaluate>[1] = {}) => evaluate({ ...base, ...over }, opts);
 const denied = (over: Partial<BaseFacts>) => { const o = run(over); return o.action === 'deny' ? o.ruleIds : o.action; };
@@ -105,4 +105,20 @@ test('R-08: a denylisted payout number is refused (403) before any limit is look
   const o = run({ payout_number_denied: true, amount_fcfa: 3_000_000 });
   assert.ok(o.action === 'deny' && o.status === 403 && o.ruleIds[0] === 'R-08');
   assert.equal(run({ payout_number_denied: false }).action, 'allow');
+});
+
+test('K-01: above the KYC threshold without an approved check is denied; at or below it, or once approved, it is allowed', () => {
+  const over = run({ kyc_approved: false, amount_fcfa: 200_001 });
+  assert.equal(over.action, 'deny');
+  assert.deepEqual('ruleIds' in over ? over.ruleIds : [], ['K-01']);
+  assert.equal(over.facts.kyc_required, true);
+  assert.equal(run({ kyc_approved: false, amount_fcfa: 200_000 }).action, 'allow'); // "above 200,000": the limit itself is fine
+  assert.equal(run({ kyc_approved: false, amount_fcfa: 5_000 }).action, 'allow');
+  assert.equal(run({ kyc_approved: true, amount_fcfa: 1_900_000 }).action, 'allow');
+});
+
+test('K-01 in shadow mode is logged but does not block', () => {
+  const o = evaluate({ ...base, kyc_approved: false, amount_fcfa: 500_000 }, { modes: { 'K-01': 'shadow' } });
+  assert.equal(o.action, 'allow');
+  assert.ok(o.fired.some((f) => f.id === 'K-01' && !f.applied));
 });

@@ -37,7 +37,7 @@ export async function swapStatus(env: Env, userId: string, deps?: { client?: Pri
 	const configured = swapsConfigured(env);
 	const view: SwapStatusView = { configured, signerId: configured ? env.PRIVY_SIGNER_ID : null, policyIds: { ethereum: env.PRIVY_SWAP_POLICY_EVM || null, solana: env.PRIVY_SWAP_POLICY_SOL || null }, wallets: { ethereum: null, solana: null }, assets: Object.keys(SWAP_ASSETS) };
 	if (!configured) return view;
-	const u = await client(env, deps).wallets(userId);
+	const u = await mapPrivy(() => client(env, deps).wallets(userId));
 	for (const c of ['ethereum', 'solana'] as const) if (u.wallets[c]) view.wallets[c] = { address: u.wallets[c]!.address, ready: u.delegated[c] };
 	return view;
 }
@@ -52,7 +52,7 @@ export interface QuoteView {
 export async function quoteSwap(env: Env, userId: string, input: { from: unknown; to: unknown; amount: unknown; slippageBps?: unknown }, deps?: { client?: PrivySwapClient }): Promise<QuoteView> {
 	if (!swapsConfigured(env)) throw new SwapError('Swaps are not available yet', 503);
 	const c = client(env, deps);
-	const u = await c.wallets(userId);
+	const u = await mapPrivy(() => c.wallets(userId));
 	const slip = input.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
 	const plan = planSwap({ from: input.from, to: input.to, amount: input.amount, slippageBps: slip, wallets: u.wallets });
 	if (!plan.ok) throw new SwapError(plan.error);
@@ -95,7 +95,7 @@ export async function createSwap(env: Env, userId: string, input: { id: unknown;
 		return view(await refreshSwap(env, existing, false, deps));
 	}
 	const c = client(env, deps);
-	const u = await c.wallets(userId);
+	const u = await mapPrivy(() => c.wallets(userId));
 	const slippage = (input.slippageBps ?? DEFAULT_SLIPPAGE_BPS) as number;
 	const plan = planSwap({ from: input.from, to: input.to, amount: input.amount, slippageBps: slippage, wallets: u.wallets });
 	if (!plan.ok) throw new SwapError(plan.error);

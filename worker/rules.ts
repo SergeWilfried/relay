@@ -32,6 +32,8 @@ export const BASE_LIMITS = { perTx: 2_000_000, daily: 2_000_000, monthly: 10_000
 export const MIN_FCFA = 1_000;
 /** ISO 3166-1 alpha-2, by request IP. Deny-only (an IP can be spoofed, so a country never grants anything). Have compliance confirm this list. */
 export const BLOCKED_COUNTRIES = ['KP', 'IR', 'SY', 'CU'];
+/** Orders above this need an approved identity check (rule K-01). Compared against the server-priced FCFA amount. */
+export const KYC_THRESHOLD_FCFA = 200_000;
 export const tierLimits = (_tier: number) => BASE_LIMITS;
 
 export const RULES: Rule[] = [
@@ -41,6 +43,8 @@ export const RULES: Rule[] = [
 		when: { user_status: 'restricted' }, action: { type: 'hold' }, user_message: 'Your payout is under review. We will update you shortly.' },
 	{ id: 'R-01', version: 1, mode: 'enforce', phase: 3, description: 'Request from a sanctioned country',
 		when: { country_blocked: true }, action: { type: 'deny', status: 403 }, user_message: 'Service is not available in your country' },
+	{ id: 'K-01', version: 1, mode: 'enforce', phase: 3, description: 'Order above the KYC threshold without an approved identity check',
+		when: { kyc_required: true, kyc_approved: false }, action: { type: 'deny', status: 403 }, user_message: 'Verify your identity to continue.' },
 	{ id: 'R-08', version: 1, mode: 'enforce', phase: 3, description: 'Payout number is on the recipient denylist',
 		when: { payout_number_denied: true }, action: { type: 'deny', status: 403 }, user_message: 'This payout number cannot be used. Please contact support.' },
 	{ id: 'R-02', version: 1, mode: 'enforce', phase: 4, description: 'Below the minimum amount',
@@ -76,6 +80,8 @@ export interface BaseFacts {
 	clef_flag_active: boolean;
 	/** the payout number is on the recipient denylist (worker/lists.ts) */
 	payout_number_denied: boolean;
+	/** the user has an approved identity check (worker/kyc.ts) */
+	kyc_approved: boolean;
 	/** earlier requests in the last 7 days between 90% and 100% of the per-transaction limit (this request is added by evaluate) */
 	prior_near_limit_7d: number;
 }
@@ -116,7 +122,7 @@ export function evaluate(base: BaseFacts, opts: { rules?: Rule[]; modes?: Record
 	};
 
 	const near = base.amount_fcfa >= 0.9 * BASE_LIMITS.perTx && base.amount_fcfa <= BASE_LIMITS.perTx ? 1 : 0;
-	const facts0: Facts = { ...base, country_blocked: !!base.country && BLOCKED_COUNTRIES.includes(base.country), near_limit_requests_7d: base.prior_near_limit_7d + near };
+	const facts0: Facts = { ...base, country_blocked: !!base.country && BLOCKED_COUNTRIES.includes(base.country), kyc_required: base.amount_fcfa > KYC_THRESHOLD_FCFA, near_limit_requests_7d: base.prior_near_limit_7d + near };
 
 	// D-03 style rules first: "tier limits adjusted by D-03" (phase 4 of the matrix order)
 	let factor = 1;
@@ -179,13 +185,13 @@ export const COUNTED = `o.user_id = ?1 AND o.amount_fcfa IS NOT NULL AND o.statu
  */
 export const BUY_COUNTED = `b.user_id = ?1 AND b.status NOT IN ('failed', 'expired', 'cancelled') AND NOT (b.status = 'created' AND b.expires_at < ?2)`;
 
-export interface Profile { firstSeenAt: number; lastCountry: string | null; status: string; clefFlag: boolean }
+export interface Profile { firstSeenAt: number; lastCountry: string | null; status: string; clefFlag: boolean; kycApproved: boolean }
 
 /** Creates the profile on first sight (account age starts here) and returns it. */
 export async function ensureProfile(env: Env, userId: string, country: string | null, now: number): Promise<Profile> {
 	await env.DB.prepare(`INSERT OR IGNORE INTO user_profile (user_id, first_seen_at, last_country, updated_at) VALUES (?, ?, ?, ?)`).bind(userId, now, country, now).run();
-	const r = await env.DB.prepare(`SELECT first_seen_at, last_country, status, clef_flag FROM user_profile WHERE user_id = ?`).bind(userId).first<{ first_seen_at: number; last_country: string | null; status: string; clef_flag: string | null }>();
-	return { firstSeenAt: r!.first_seen_at, lastCountry: r!.last_country, status: r!.status, clefFlag: !!r!.clef_flag };
+	const r = await env.DB.prepare(`SELECT p.first_seen_at, p.last_country, p.status, p.clef_flag, (SELECT 1 FROM kyc k WHERE k.user_id = p.user_id AND k.status = 'approved') AS kyc_ok FROM user_profile p WHERE p.user_id = ?`).bind(userId).first<{ first_seen_at: number; last_country: string | null; status: string; clef_flag: string | null; kyc_ok: number | null }>();
+	return { firstSeenAt: r!.first_seen_at, lastCountry: r!.last_country, status: r!.status, clefFlag: !!r!.clef_flag, kycApproved: !!r!.kyc_ok };
 }
 
 export async function loadModes(env: Env): Promise<Record<string, Mode>> {
@@ -228,7 +234,7 @@ export async function loadFacts(env: Env, userId: string, input: { amountFcfa: n
 	).bind(userId, now, w.day, w.month).first<{ day: number; month: number; open: number }>();
 	return {
 		amount_fcfa: input.amountFcfa, country: input.country, user_status: profile.status,
-		account_age_days: Math.floor((now - profile.firstSeenAt) / DAY_MS), tier: 0,
+		account_age_days: Math.floor((now - profile.firstSeenAt) / DAY_MS), tier: profile.kycApproved ? 1 : 0, kyc_approved: profile.kycApproved,
 		day_fcfa: (usage?.day ?? 0) + (buys?.day ?? 0), month_fcfa: (usage?.month ?? 0) + (buys?.month ?? 0), open_orders: (usage?.open ?? 0) + (buys?.open ?? 0), orders_last_hour: rate?.n ?? 0,
 		country_changed: !!input.country && !!profile.lastCountry && input.country !== profile.lastCountry,
 		// a first-ever number is the baseline, not a change

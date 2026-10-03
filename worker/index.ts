@@ -13,6 +13,8 @@ import { clearClefFlag, runPatternReview } from './clefBatch';
 import { POINTS } from './clef';
 import { listSweeps, resolveSweep, retrySweep, runSweeps, SweepConflict } from './sweep';
 import { handleEvent, parseEvent } from './privy';
+import { handleSumsubEvent, kycStatus, listKyc, startKyc, SumsubError, syncKyc, verifySumsubWebhook } from './kyc';
+import type { SumsubEvent } from './kyc/sumsubSign';
 import { safeEqual, verifySvix, WebhookVerificationError } from './svix';
 
 // Static assets are served by Cloudflare; this Worker only runs for /api/* (see run_worker_first in wrangler.jsonc).
@@ -74,6 +76,13 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 	if (!safeEqual(key, env.ADMIN_API_KEY)) return json({ error: 'Unauthorized' }, 401);
 
 	if (pathname === '/api/admin/payouts' && request.method === 'GET') return json({ payouts: await listPayouts(env, url.searchParams.get('status') ?? undefined) });
+
+	if (pathname === '/api/admin/kyc' && request.method === 'GET') return json({ kyc: await listKyc(env, url.searchParams.get('status') ?? undefined) });
+	const ks = /^\/api\/admin\/kyc\/([^/]{1,200})\/sync$/.exec(pathname);
+	if (ks && request.method === 'POST') {
+		try { return json(await syncKyc(env, decodeURIComponent(ks[1]!))); }
+		catch (e) { if (e instanceof SumsubError) return json({ error: e.message }, e.status as 429 | 502 | 503); throw e; }
+	}
 
 	if (pathname === '/api/admin/rules' && request.method === 'GET') {
 		const modes = await loadModes(env);
@@ -202,6 +211,40 @@ async function payoutWebhook(request: Request, env: Env): Promise<Response> {
 }
 
 /** Swap API (Privy's swap wallet action). Authenticated: a user only ever sees and swaps from their own wallets. */
+/** Identity verification API (Sumsub). Authenticated: the token and status are only ever for the caller. */
+async function kycApi(request: Request, env: Env, pathname: string): Promise<Response> {
+	let userId: string;
+	try { userId = await authenticate(request, env); }
+	catch (e) {
+		if (e instanceof AuthError) return json({ error: e.message }, 401);
+		console.error(JSON.stringify({ msg: 'auth.misconfigured', error: e instanceof Error ? e.message : String(e) }));
+		return json({ error: 'Authentication is not configured' }, 500);
+	}
+	try {
+		if (pathname === '/api/kyc/status' && request.method === 'GET') return json(await kycStatus(env, userId));
+		if (pathname === '/api/kyc/token' && request.method === 'POST') return json(await startKyc(env, userId));
+		if (pathname === '/api/kyc/sync' && request.method === 'POST') return json(await syncKyc(env, userId));
+	} catch (e) {
+		if (e instanceof SumsubError) return json({ error: e.message }, e.status as 403 | 409 | 429 | 502 | 503);
+		throw e;
+	}
+	return json({ error: 'Not found' }, 404);
+}
+
+/** Sumsub webhooks: signed with HMAC over the raw body (X-Payload-Digest). */
+async function sumsubWebhook(request: Request, env: Env): Promise<Response> {
+	const body = await request.text();
+	if (body.length > MAX_JSON_BYTES) return json({ error: 'Payload too large' }, 413);
+	if (!(await verifySumsubWebhook(env, body, request.headers))) return json({ error: 'Invalid signature' }, 401);
+	let event: SumsubEvent;
+	try { event = JSON.parse(body) as SumsubEvent; } catch { return json({ error: 'Invalid JSON' }, 400); }
+	try { return json({ ok: true, ...(await handleSumsubEvent(env, event)) }); }
+	catch (e) {
+		if (e instanceof SumsubError) return json({ error: 'Try again' }, 503); // Sumsub redelivers non-2xx
+		throw e;
+	}
+}
+
 async function swapApi(request: Request, env: Env, pathname: string): Promise<Response> {
 	let userId: string;
 	try { userId = await authenticate(request, env); }
@@ -309,6 +352,8 @@ export default {
 			if (pathname.startsWith('/api/admin/')) return await adminApi(request, env, pathname, new URL(request.url));
 			if (pathname === '/api/webhooks/deposit') return request.method === 'POST' ? await depositWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
 			if (pathname === '/api/webhooks/payout') return request.method === 'POST' ? await payoutWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
+			if (pathname === '/api/webhooks/sumsub') return request.method === 'POST' ? await sumsubWebhook(request, env) : json({ error: 'Method not allowed' }, 405);
+			if (pathname.startsWith('/api/kyc/')) return await kycApi(request, env, pathname);
 			if (pathname === '/api/swap' || pathname.startsWith('/api/swap/')) return await swapApi(request, env, pathname);
 			if (pathname === '/api/orders' || pathname.startsWith('/api/orders/')) return await ordersApi(request, env, ctx, pathname);
 			if (pathname.startsWith('/api/')) return json({ error: 'Not found' }, 404);

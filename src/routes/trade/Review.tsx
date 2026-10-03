@@ -10,6 +10,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { createServerBuy, createServerOrder } from '../../lib/serverOrders';
 import { createServerSwap } from '../../lib/swapLive';
 import { useT } from '../../i18n';
+import { kycRequiredMessage } from '../../lib/kycLive';
 import { useApp } from '../../state/app';
 import { useTrade } from '../../state/trade';
 
@@ -20,7 +21,7 @@ export default function Review() {
   const { t } = useT();
   const { state } = useLocation() as { state: { confirm?: boolean } | null };
   const { draft, requoteDraft, clearDraft } = useTrade();
-  const { kyc, addOrder } = useApp();
+  const { needsKyc, addOrder } = useApp();
   const online = useOnline();
   const auth = useAuth();
   const now = useNow(!!draft, 500);
@@ -52,12 +53,15 @@ export default function Review() {
   const swapNet = draft?.from.net === 'Solana' ? 'Solana' : 'Ethereum';
   const needsSigner = auth.mode === 'privy' && draft?.tab === 'swap' && !auth.swapReady(swapNet);
   const enable = () => run(async () => { await auth.enableSwaps(swapNet); });
+  // identity check: only for orders above the threshold (the server enforces it too)
+  const kycNeeded = !!draft && needsKyc(draft.tab === 'buy' ? draft.amount : draft.quote.fcfaGross);
   const canConfirm = !!draft && !expired && phase === 'live' && online && !busy;
 
   const confirm = () => {
     if (!draft || !canConfirm) return;
-    if (kyc !== 'verified') { nav('/trade/verify'); return; }
+    if (kycNeeded) { nav('/trade/verify'); return; }
     run(async () => {
+      try {
       await submitApi();
       let order = submitDraft(draft);
       // live mode: the server owns sell orders. It issues the deposit address and later advances the order
@@ -86,12 +90,17 @@ export default function Review() {
       addOrder(order);
       nav(order.tab === 'sell' ? `/trade/deposit/${order.id}` : order.tab === 'buy' && order.synced ? `/trade/pay/${order.id}` : `/trade/status/${order.id}`, { replace: true });
       clearDraft();
+      } catch (e) {
+        // the server decides who needs the identity check: send the user there instead of showing a dead end
+        if (e instanceof Error && e.message === kycRequiredMessage()) { nav('/trade/verify'); return; }
+        throw e;
+      }
     });
   };
 
   // returning from identity verification: confirm straight away, but only if the quote is still the one they saw
   useEffect(() => {
-    if (state?.confirm && !autoDone.current && draft && canConfirm && !moved && kyc === 'verified') { autoDone.current = true; confirm(); }
+    if (state?.confirm && !autoDone.current && draft && canConfirm && !moved && !kycNeeded) { autoDone.current = true; confirm(); }
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!draft) return leaving.current ? null : <Navigate to="/trade/swap" replace />;
