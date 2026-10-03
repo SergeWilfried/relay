@@ -1,5 +1,6 @@
 import { notify } from './notify';
 import { holdActive } from './orders';
+import { lowFloat } from './payout/pawapay';
 import { getProvider } from './payout';
 
 export type PayoutStatus = 'pending_approval' | 'approved' | 'sending' | 'paid' | 'failed' | 'rejected';
@@ -96,7 +97,7 @@ export async function executePayout(env: Env, id: string): Promise<PayoutRow> {
 		else if (out.state === 'pending') await transition(env, id, ['sending'], `provider_ref = ?`, out.providerRef); // stays 'sending' until the webhook
 		else {
 			await transition(env, id, ['sending'], `status = 'failed', error = ?`, out.error);
-			await notify(env, { level: 'warning', title: 'Payout failed: the provider refused it', details: { payout: id, order: row.order_id, amountFcfa: row.amount_fcfa, error: out.error } });
+			await notify(env, { level: 'warning', title: 'Payout failed: the provider refused it', details: { payout: id, order: row.order_id, amountFcfa: row.amount_fcfa, error: out.detail ?? out.error } });
 		}
 		log('payout.result', { id, state: out.state });
 	} catch (e) {
@@ -116,4 +117,54 @@ export async function settleFromWebhook(env: Env, reference: string, state: 'pai
 	log('payout.webhook', { reference, state, applied: ok });
 	if (ok && state === 'failed') await notify(env, { level: 'warning', title: 'Payout failed: the provider reported a failure', details: { payout: reference, error } });
 	return ok;
+}
+
+const RECHECK_AFTER_MS = 3 * 60_000; // pawaPay advises rechecking payouts still pending after 15 minutes; 3 is cheap and covers callbacks sent to the wrong URL
+
+/**
+ * Settles payouts stuck in 'sending' by asking the provider what really happened: a missed callback, or an unknown outcome
+ * (a network error after sending). A definitive answer settles it; "not found" means the provider never received it, which is
+ * a clean failure that a person can retry (the retry reuses the same provider id, so it can never pay twice).
+ */
+export async function reconcilePayouts(env: Env): Promise<{ checked: number; settled: number }> {
+	const provider = getProvider(env);
+	if (!provider.status) return { checked: 0, settled: 0 };
+	const { results } = await env.DB.prepare(`SELECT id, order_id, amount_fcfa FROM payouts WHERE status = 'sending' AND updated_at < ? ORDER BY updated_at LIMIT 20`)
+		.bind(Date.now() - RECHECK_AFTER_MS).all<{ id: string; order_id: string; amount_fcfa: number }>();
+	let settled = 0;
+	for (const r of results) {
+		let s;
+		try { s = await provider.status(r.id); } catch { continue; } // the provider is unreachable: try again next run
+		if (s.state === 'pending') continue;
+		const ok = s.state === 'paid'
+			? await transition(env, r.id, ['sending'], `status = 'paid', paid_at = ?, error = NULL`, Date.now())
+			: await transition(env, r.id, ['sending'], `status = 'failed', error = ?`, s.error);
+		if (ok) {
+			settled++;
+			log('payout.reconciled', { id: r.id, state: s.state });
+			if (s.state !== 'paid') await notify(env, { level: 'warning', title: 'Payout failed (found by the status recheck)', details: { payout: r.id, order: r.order_id, amountFcfa: r.amount_fcfa, error: s.error } });
+		}
+	}
+	return { checked: results.length, settled };
+}
+
+/** Matrix B-02: mobile money float below this per country (XOF). */
+export const FLOAT_FLOOR_XOF = 2_000_000;
+const FLOAT_ALERT_EVERY_SECONDS = 12 * 3600;
+
+/**
+ * Alerts when a country's prepaid wallet with the payout provider is below the floor, at most once per 12 hours per country.
+ * A payout fails with "wallet out of funds" when the wallet of ITS country is empty, so a top-up has to be per country.
+ */
+export async function checkFloat(env: Env): Promise<{ low: string[] }> {
+	const provider = getProvider(env);
+	if (!provider.balances) return { low: [] };
+	const low = lowFloat(await provider.balances(), FLOAT_FLOOR_XOF);
+	for (const b of low) {
+		const key = `float:alert:${b.country}`;
+		if (await env.EVENTS.get(key)) continue;
+		await env.EVENTS.put(key, String(Date.now()), { expirationTtl: FLOAT_ALERT_EVERY_SECONDS });
+		await notify(env, { level: 'critical', title: `Payout wallet low in ${b.country}: payouts there will fail until it is topped up`, details: { country: b.country, balance: `${b.balance} ${b.currency}`, floor: `${FLOAT_FLOOR_XOF} ${b.currency}` } });
+	}
+	return { low: low.map((b) => b.country) };
 }

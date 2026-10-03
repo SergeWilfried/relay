@@ -1,5 +1,6 @@
 import { normalizeAddress, SELL_ASSETS, toUnits } from './assets';
 import { notify } from './notify';
+import { getProvider } from './payout';
 import { createDepositWallet } from './depositWallet';
 import { isDenied, kindOfChain } from './lists';
 import { sellQuote } from './pricing';
@@ -80,6 +81,10 @@ export async function createSellOrder(env: Env, userId: string, input: CreateOrd
 	// Rules run before a wallet is created: a denied order costs nothing. The FCFA value is priced here, never taken from the client.
 	const now = Date.now();
 	const amountFcfa = sellQuote(asset.sym, amount).payoutFcfa;
+	// the payout provider must be able to pay this operator in this number's country, for this amount (pawaPay has no PI-SPI, not every
+	// operator everywhere, and its own limits): refused now, before the customer sends any crypto
+	const refusal = await getProvider(env).supports?.(operator, phone, amountFcfa);
+	if (typeof refusal === 'string') throw new BadRequest(refusal);
 	const profile = await ensureProfile(env, userId, country, now);
 	const facts = await loadFacts(env, userId, { amountFcfa, phone, country }, profile, now);
 	const outcome = evaluate(facts, { modes: await loadModes(env) });

@@ -1,6 +1,6 @@
 import { AuthError, authenticate } from './auth';
 import { BadRequest, createSellOrder, getOrder, listOrders } from './orders';
-import { approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
+import { FLOAT_FLOOR_XOF, checkFloat, reconcilePayouts, approvePayout, Conflict, listPayouts, rejectPayout, releaseHold, resolvePayout, retryPayout, settleFromWebhook } from './payouts';
 import { getProvider } from './payout';
 import { ensureProfile, loadModes, RULES, RuleDenied, setRuleMode, setUserStatus } from './rules';
 import { revenueReport } from './revenue';
@@ -105,6 +105,11 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 		return json({ user: decodeURIComponent(um[1]!), status: body.status });
 	}
 
+	if (pathname === '/api/admin/payouts/float' && request.method === 'GET') {
+		const balances = await getProvider(env).balances?.();
+		return json({ provider: getProvider(env).name, balances: balances ?? null, floorXof: FLOAT_FLOOR_XOF });
+	}
+	if (pathname === '/api/admin/payouts/reconcile' && request.method === 'POST') return json(await reconcilePayouts(env));
 	if (pathname === '/api/admin/lists' && request.method === 'GET') return json({ entries: await listEntries(env, url.searchParams.get('kind') ?? undefined) });
 	if (pathname === '/api/admin/lists' && request.method === 'POST') {
 		const body = (await request.json().catch(() => ({}))) as { kind?: unknown; value?: unknown; note?: unknown };
@@ -163,9 +168,9 @@ async function adminApi(request: Request, env: Env, pathname: string, url: URL):
 async function payoutWebhook(request: Request, env: Env): Promise<Response> {
 	const body = await request.text();
 	if (body.length > MAX_JSON_BYTES) return json({ error: 'Payload too large' }, 413);
-	const event = await getProvider(env).parseWebhook(body, request.headers, env);
+	const event = await getProvider(env).parseWebhook(body, request.headers, env, new URL(request.url));
 	if (!event) return json({ error: 'Invalid signature' }, 401);
-	await settleFromWebhook(env, event.reference, event.state, event.error);
+	if (event.state !== 'ignore') await settleFromWebhook(env, event.reference, event.state, event.error);
 	return json({ ok: true });
 }
 
@@ -228,6 +233,8 @@ export default {
 	async scheduled(event, env, ctx): Promise<void> {
 		// the daily cron is Clef's activity review (C-04); the 5-minute cron is sweeps
 		if (event.cron === DAILY_CRON) { ctx.waitUntil(runPatternReview(env).then((r) => console.log(JSON.stringify({ msg: 'clef.review', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'clef.review_failed', error: e instanceof Error ? e.message : String(e) })))); return; }
+		ctx.waitUntil(reconcilePayouts(env).then((r) => console.log(JSON.stringify({ msg: 'payout.reconcile', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'payout.reconcile_failed', error: e instanceof Error ? e.message : String(e) }))));
+		ctx.waitUntil(checkFloat(env).catch((e) => console.error(JSON.stringify({ msg: 'payout.float_check_failed', error: e instanceof Error ? e.message : String(e) }))));
 		ctx.waitUntil(runSweeps(env).then((r) => console.log(JSON.stringify({ msg: 'sweep.run', ...r }))).catch((e) => console.error(JSON.stringify({ msg: 'sweep.run_failed', error: e instanceof Error ? e.message : String(e) }))));
 	},
 } satisfies ExportedHandler<Env>;

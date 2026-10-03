@@ -28,7 +28,9 @@
         },
         "vars": {
             "LIVE": "false",
-            "PAYOUT_PROVIDER": "sandbox",
+            "PAYOUT_PROVIDER": "sandbox", // "pawapay" pays through pawaPay (needs the PAWAPAY_API_TOKEN secret)
+            // pawaPay API base: https://api.sandbox.pawapay.io (no money moves) or https://api.pawapay.io (production: only with LIVE=true)
+            "PAWAPAY_BASE_URL": "https://api.sandbox.pawapay.io",
             // JSON-RPC endpoint used to fetch a blockhash for Solana sweeps (empty = the public mainnet-beta endpoint, which is rate-limited: use a provider URL in production)
             "SOLANA_RPC_URL": "",
             // "true" turns Clef on (alert triage C-05 and the daily review C-04). Both start in shadow mode: see README.
