@@ -55,7 +55,7 @@ export default function PoolAdd() {
         sub={<>{t('From your Relay wallet')} · {t('Balance')} {balance === null ? '—' : fmtCrypto(balance, 2, asset.dec)}{' '}
           <button type="button" className="qlink" disabled={balance === null} onClick={(e) => { e.preventDefault(); setV(String(maxSpend(pool.sym, balance ?? 0))); }}>{t('Max')}</button></>} />
       <div className="kv2" style={{ paddingTop: 14 }}><div>{t('Projected earnings')}</div><div style={{ color: 'var(--acct)' }}>{t('~{amount} {sym} / month', { amount: fmtCrypto(monthly, 2, asset.dec), sym: pool.sym })}</div></div>
-      <div className="kv2" style={{ paddingBottom: 16 }}><div>{t('Withdraw anytime')}</div><div>{t('1–2 min to your wallet')}</div></div>
+      <div className="kv2" style={{ paddingBottom: 16 }}><div>{t('Withdraw anytime')}</div><div>{t('1–2 min')}</div></div>
       <ActionButton busy={busy} busyLabel={t('Confirming…')} disabled={n <= 0 || !online || insufficient} onClick={confirm}>{label}</ActionButton>
       <ErrorNote>{error}</ErrorNote>
     </div>

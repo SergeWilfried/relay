@@ -278,7 +278,7 @@ export const app: Record<string, string> = {
   'Add liquidity · {name}': 'Ajouter de la liquidité · {name}',
   'From your Relay wallet': 'Depuis votre portefeuille Relay',
   '~{amount} {sym} / month': '~{amount} {sym} / mois',
-  '1–2 min to your wallet': '1 à 2 min vers votre portefeuille',
+  '1–2 min': '1 à 2 min',
   'Withdraw · {name}': 'Retirer · {name}',
   'To your Relay wallet · arrives 1–2 min': 'Vers votre portefeuille Relay · arrive en 1 à 2 min',
   '{amount} {sym} · {name} pool': '{amount} {sym} · pool {name}',
