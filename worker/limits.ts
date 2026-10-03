@@ -16,7 +16,7 @@ export interface TierLimits { perTx: number; daily: number; monthly: number }
 
 export const LIMITS = {
 	/** tier 0: no approved identity check. perTx = daily = the KYC threshold, so a large amount can't be split into small orders. */
-	unverified: { perTx: KYC_THRESHOLD_FCFA, daily: KYC_THRESHOLD_FCFA, monthly: 10_000_000 },
+	unverified: { perTx: KYC_THRESHOLD_FCFA, daily: KYC_THRESHOLD_FCFA, monthly: 2_000_000 },
 	/** tier 1: an approved Sumsub check. Flat 2M per transaction and day, 10M per month (tiers beyond this are a config change). */
 	verified: { perTx: 2_000_000, daily: 2_000_000, monthly: 10_000_000 },
 } as const satisfies Record<string, TierLimits>;

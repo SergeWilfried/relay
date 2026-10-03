@@ -128,7 +128,7 @@ test('tier limits: unverified is capped at the KYC threshold per order and day a
   const shadow = { modes: { 'K-01': 'shadow' as const } };
   const o = run({ kyc_approved: false, tier: 0, amount_fcfa: 300_000 }, shadow);
   assert.ok(o.action === 'deny' && o.ruleIds.join() === 'R-03,R-04');
-  assert.deepEqual([o.limits.perTx, o.limits.daily, o.limits.monthly], [200_000, 200_000, 10_000_000]);
+  assert.deepEqual([o.limits.perTx, o.limits.daily, o.limits.monthly], [200_000, 200_000, 2_000_000]);
   const v = run({ amount_fcfa: 2_000_000 });
   assert.deepEqual([v.limits.perTx, v.limits.daily, v.limits.monthly], [2_000_000, 2_000_000, 10_000_000]);
 });

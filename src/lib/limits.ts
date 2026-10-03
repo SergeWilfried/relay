@@ -11,7 +11,7 @@ import type { ServerLimits } from './limitsLive';
  *  - verified: 2M per transaction and day, 10M per month.
  */
 export const LIMITS = {
-  unverified: { perTx: 200_000, daily: 200_000, monthly: 10_000_000 },
+  unverified: { perTx: 200_000, daily: 200_000, monthly: 2_000_000 },
   verified: { perTx: 2_000_000, daily: 2_000_000, monthly: 10_000_000 },
 } as const;
 export const KYC_THRESHOLD = 200_000;

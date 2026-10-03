@@ -114,7 +114,7 @@ Each payout stores its split (`gross_fcfa`, `platform_fee_fcfa`, `psp_fee_fcfa`,
 
 | Tier | Per transaction | Per day | Per month |
 |---|---|---|---|
-| Not verified (no approved Sumsub check) | 200,000 FCFA | 200,000 FCFA | 10,000,000 FCFA |
+| Not verified (no approved Sumsub check) | 200,000 FCFA | 200,000 FCFA | 2,000,000 FCFA |
 | Verified (Sumsub `id-and-liveness` approved) | 2,000,000 FCFA | 2,000,000 FCFA | 10,000,000 FCFA |
 
 - **Server rules** (`worker/rules.ts`): R-02..R-05 use `tierLimits(tier)`. **K-01** asks for the identity check when an order **or the day's total** (sells + buys + swaps) would pass 200,000 FCFA, and is evaluated before the limit rules, so the customer sees "Verify your identity to continue" and not a limit message. Unverified daily = per transaction = the threshold, so a large amount can't be split into small orders; the tier limits are also a backstop if K-01 is ever put in shadow mode.
